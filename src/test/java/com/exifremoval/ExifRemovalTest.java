@@ -17,11 +17,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExifRemovalTest {
+
+    private static final Logger LOG = Logger.getLogger(ExifRemovalTest.class.getName());
 
     static final Path tempDir = Path.of("build/test-output");
 
@@ -156,11 +159,11 @@ class ExifRemovalTest {
     // ---- Helpers ----
 
     private File processImage(File input, String outputName) throws Exception {
-        int orientation = ExifRemoval.readOrientation(input);
+        ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(input);
         BufferedImage image = ImageIO.read(input);
         assertNotNull(image, "Could not decode input: " + input);
 
-        BufferedImage oriented = ExifRemoval.applyOrientation(image, orientation);
+        BufferedImage oriented = ExifRemoval.applyOrientation(image, info.orientation);
 
         String format = ExifRemoval.getFormatName(input.getName());
         File output = tempDir.resolve(addSuffix(outputName, "_processed")).toFile();
@@ -220,14 +223,13 @@ class ExifRemovalTest {
                         filename, (ratio - 1) * 100, outputSize, expectedSize));
     }
 
-    /** Same check but non-fatal — logs a warning instead of failing. */
     private static void warnIfLarger(File output, File expected, String filename) {
         long outputSize = output.length();
         long expectedSize = expected.length();
         if (outputSize > expectedSize) {
             double pct = ((double) outputSize / expectedSize - 1) * 100;
-            System.err.printf("WARNING: %s is %.0f%% larger than reference (%,d vs %,d bytes)%n",
-                    filename, pct, outputSize, expectedSize);
+            LOG.warning(String.format("%s is %.0f%% larger than reference (%,d vs %,d bytes)",
+                    filename, pct, outputSize, expectedSize));
         }
     }
 

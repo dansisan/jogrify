@@ -6,6 +6,7 @@ import com.drew.metadata.Directory;
 import com.drew.metadata.Tag;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.ExifReader;
+import com.drew.metadata.exif.GpsDirectory;
 import com.drew.metadata.png.PngDirectory;
 
 import javax.imageio.IIOImage;
@@ -18,6 +19,8 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
 
 public class ExifRemoval {
@@ -37,7 +40,16 @@ public class ExifRemoval {
             System.exit(1);
         }
 
-        int orientation = readOrientation(inputFile);
+        ImageInfo info = readImageInfo(inputFile);
+
+        if (!info.needsProcessing()) {
+            if (!inputFile.equals(outputFile)) {
+                Files.copy(inputFile.toPath(), outputFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            System.out.println("Skipped (no metadata to strip): " + inputFile);
+            return;
+        }
+
         BufferedImage image = ImageIO.read(inputFile);
 
         if (image == null) {
@@ -45,39 +57,60 @@ public class ExifRemoval {
             System.exit(1);
         }
 
-        BufferedImage oriented = applyOrientation(image, orientation);
+        BufferedImage oriented = applyOrientation(image, info.orientation);
 
         String formatName = getFormatName(inputFile.getName());
         writeImage(oriented, formatName, outputFile);
 
         System.out.println("Processed: " + inputFile + " -> " + outputFile
-                + " (orientation=" + orientation + ", " + oriented.getWidth() + "x" + oriented.getHeight() + ")");
+                + " (orientation=" + info.orientation + ", " + oriented.getWidth() + "x" + oriented.getHeight() + ")");
     }
 
-    static int readOrientation(File file) {
+    static class ImageInfo {
+        final int orientation;
+        final boolean hasGps;
+
+        ImageInfo(int orientation, boolean hasGps) {
+            this.orientation = orientation;
+            this.hasGps = hasGps;
+        }
+
+        boolean needsProcessing() {
+            return hasGps;
+        }
+    }
+
+    static ImageInfo readImageInfo(File file) {
         try {
             Metadata metadata = ImageMetadataReader.readMetadata(file);
+
+            boolean hasGps = metadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
+
+            int orientation = 1;
 
             // First, try standard EXIF directory (works for JPEG)
             ExifIFD0Directory exifDir = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
             if (exifDir != null && exifDir.containsTag(ExifIFD0Directory.TAG_ORIENTATION)) {
-                return exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
-            }
-
-            // For PNG: EXIF may be hex-encoded in a tEXt chunk ("Raw profile type exif")
-            for (Directory dir : metadata.getDirectoriesOfType(PngDirectory.class)) {
-                for (Tag tag : dir.getTags()) {
-                    String desc = tag.getDescription();
-                    if (desc != null && desc.contains("Raw profile type exif")) {
-                        int orientation = parseOrientationFromRawExifProfile(desc);
-                        if (orientation > 0) return orientation;
+                orientation = exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
+            } else {
+                // For PNG: EXIF may be hex-encoded in a tEXt chunk ("Raw profile type exif")
+                for (Directory dir : metadata.getDirectoriesOfType(PngDirectory.class)) {
+                    for (Tag tag : dir.getTags()) {
+                        String desc = tag.getDescription();
+                        if (desc != null && desc.contains("Raw profile type exif")) {
+                            int parsed = parseOrientationFromRawExifProfile(desc);
+                            if (parsed > 0) { orientation = parsed; break; }
+                        }
                     }
+                    if (orientation > 1) break;
                 }
             }
+
+            return new ImageInfo(orientation, hasGps);
         } catch (Exception e) {
-            // No EXIF or unreadable — treat as normal orientation
+            // No EXIF or unreadable — treat as normal, no GPS
+            return new ImageInfo(1, false);
         }
-        return 1;
     }
 
     /**
