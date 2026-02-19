@@ -219,9 +219,11 @@ public class ExifRemoval {
 
     static void writeImage(BufferedImage image, String format, File output) throws Exception {
         if ("jpeg".equals(format)) {
-            writeWithQuality(image, "jpeg", output, 0.95f);
+            writeWithQuality(image, "jpeg", output, 0.85f);
         } else if ("webp".equals(format)) {
             writeWithQuality(image, "webp", output, 0.80f);
+        } else if ("png".equals(format)) {
+            writeWithQuality(image, "png", output, 0.0f);
         } else {
             ImageIO.write(image, format, output);
         }
