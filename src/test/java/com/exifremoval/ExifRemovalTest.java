@@ -4,7 +4,7 @@ import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.GpsDirectory;
 
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -12,7 +12,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -21,8 +23,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ExifRemovalTest {
 
-    @TempDir
-    Path tempDir;
+    static final Path tempDir = Path.of("build/test-output");
+
+    @BeforeAll
+    static void createOutputDir() throws Exception {
+        Files.createDirectories(tempDir);
+    }
 
     // ---- Orientation tests (18 cases) ----
 
@@ -43,6 +49,7 @@ class ExifRemovalTest {
         File expected = resourceFile("testdata/orientation/expected/" + filename);
 
         File output = processImage(input, filename);
+        copyExpected(expected, filename);
 
         BufferedImage actualImg = ImageIO.read(output);
         BufferedImage expectedImg = ImageIO.read(expected);
@@ -58,6 +65,8 @@ class ExifRemovalTest {
         double rmse = computeRMSE(expectedImg, actualImg);
         assertTrue(rmse < 0.02,
                 "RMSE too high for " + filename + ": " + rmse);
+
+        warnIfLarger(output, expected, filename);
     }
 
     // ---- GPS metadata stripping tests (5 cases) ----
@@ -74,6 +83,7 @@ class ExifRemovalTest {
         File expected = resourceFile("testdata/format/expected/" + filename);
 
         File output = processImage(input, filename);
+        copyExpected(expected, filename);
 
         assertNoGpsMetadata(output);
 
@@ -89,6 +99,7 @@ class ExifRemovalTest {
                 "Height mismatch for " + filename);
 
         double rmse = computeRMSE(expectedImg, actualImg);
+
         if (isLossless(ext)) {
             assertEquals(0.0, rmse, 1e-9,
                     "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
@@ -96,6 +107,8 @@ class ExifRemovalTest {
             assertTrue(rmse < 0.02,
                     "RMSE too high for " + filename + ": " + rmse);
         }
+
+        warnIfLarger(output, expected, filename);
     }
 
     // ---- Rotation tests (5 cases) ----
@@ -112,6 +125,7 @@ class ExifRemovalTest {
         File expected = resourceFile("testdata/format/expected/" + filename);
 
         File output = processImage(input, filename);
+        copyExpected(expected, filename);
 
         assertNoGpsMetadata(output);
 
@@ -127,6 +141,7 @@ class ExifRemovalTest {
                 "Height mismatch for " + filename);
 
         double rmse = computeRMSE(expectedImg, actualImg);
+
         if (isLossless(ext)) {
             assertEquals(0.0, rmse, 1e-9,
                     "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
@@ -134,6 +149,8 @@ class ExifRemovalTest {
             assertTrue(rmse < 0.02,
                     "RMSE too high for " + filename + ": " + rmse);
         }
+
+        warnIfLarger(output, expected, filename);
     }
 
     // ---- Helpers ----
@@ -146,9 +163,19 @@ class ExifRemovalTest {
         BufferedImage oriented = ExifRemoval.applyOrientation(image, orientation);
 
         String format = ExifRemoval.getFormatName(input.getName());
-        File output = tempDir.resolve(outputName).toFile();
+        File output = tempDir.resolve(addSuffix(outputName, "_processed")).toFile();
         ExifRemoval.writeImage(oriented, format, output);
         return output;
+    }
+
+    private void copyExpected(File expected, String outputName) throws Exception {
+        Path dest = tempDir.resolve(addSuffix(outputName, "_expected"));
+        Files.copy(expected.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private static String addSuffix(String filename, String suffix) {
+        int dot = filename.lastIndexOf('.');
+        return filename.substring(0, dot) + suffix + filename.substring(dot);
     }
 
     private static double computeRMSE(BufferedImage a, BufferedImage b) {
@@ -182,6 +209,26 @@ class ExifRemovalTest {
 
         // Normalize to 0-1 range (max channel value is 255)
         return Math.sqrt((double) sumSq / count) / 255.0;
+    }
+
+    private static void assertNotLarger(File output, File expected, String filename) {
+        long outputSize = output.length();
+        long expectedSize = expected.length();
+        double ratio = (double) outputSize / expectedSize;
+        assertTrue(ratio <= 1.10,
+                String.format("%s is %.0f%% larger than reference (%,d vs %,d bytes)",
+                        filename, (ratio - 1) * 100, outputSize, expectedSize));
+    }
+
+    /** Same check but non-fatal — logs a warning instead of failing. */
+    private static void warnIfLarger(File output, File expected, String filename) {
+        long outputSize = output.length();
+        long expectedSize = expected.length();
+        if (outputSize > expectedSize) {
+            double pct = ((double) outputSize / expectedSize - 1) * 100;
+            System.err.printf("WARNING: %s is %.0f%% larger than reference (%,d vs %,d bytes)%n",
+                    filename, pct, outputSize, expectedSize);
+        }
     }
 
     private static void assertNoGpsMetadata(File file) throws Exception {
