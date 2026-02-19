@@ -52,6 +52,7 @@ class ExifRemovalTest {
         File expected = resourceFile("testdata/orientation/expected/" + filename);
 
         File output = processImage(input, filename);
+        copyOriginal(input, filename);
         copyExpected(expected, filename);
 
         BufferedImage actualImg = ImageIO.read(output);
@@ -86,6 +87,7 @@ class ExifRemovalTest {
         File expected = resourceFile("testdata/format/expected/" + filename);
 
         File output = processImage(input, filename);
+        copyOriginal(input, filename);
         copyExpected(expected, filename);
 
         assertNoGpsMetadata(output);
@@ -128,6 +130,7 @@ class ExifRemovalTest {
         File expected = resourceFile("testdata/format/expected/" + filename);
 
         File output = processImage(input, filename);
+        copyOriginal(input, filename);
         copyExpected(expected, filename);
 
         assertNoGpsMetadata(output);
@@ -174,6 +177,11 @@ class ExifRemovalTest {
     private void copyExpected(File expected, String outputName) throws Exception {
         Path dest = tempDir.resolve(addSuffix(outputName, "_expected"));
         Files.copy(expected.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private void copyOriginal(File input, String outputName) throws Exception {
+        Path dest = tempDir.resolve(addSuffix(outputName, "_original"));
+        Files.copy(input.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static String addSuffix(String filename, String suffix) {
