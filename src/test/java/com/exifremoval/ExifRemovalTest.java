@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvFileSource;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -36,38 +37,7 @@ class ExifRemovalTest {
     // ---- Ground truth: verify our metadata reader agrees with exiftool ----
 
     @ParameterizedTest(name = "metadata: {0}")
-    @CsvSource({
-            // Format inputs — GPS and orientation verified with exiftool
-            "testdata/format/input/gps.jpg,    true,  1",
-            "testdata/format/input/gps.png,    true,  1",
-            "testdata/format/input/gps.tiff,   true,  1",
-            "testdata/format/input/gps.webp,   true,  1",
-            "testdata/format/input/gps.gif,    false, 1",
-            "testdata/format/input/rotate.jpg,  true,  8",
-            "testdata/format/input/rotate.png,  true,  8",
-            "testdata/format/input/rotate.tiff, true,  8",
-            "testdata/format/input/rotate.webp, true,  8",
-            "testdata/format/input/rotate.gif,  false, 1",
-            // Orientation inputs — no GPS, orientation matches filename suffix
-            "testdata/orientation/input/Landscape_0.jpg, false, 0",
-            "testdata/orientation/input/Landscape_1.jpg, false, 1",
-            "testdata/orientation/input/Landscape_2.jpg, false, 2",
-            "testdata/orientation/input/Landscape_3.jpg, false, 3",
-            "testdata/orientation/input/Landscape_4.jpg, false, 4",
-            "testdata/orientation/input/Landscape_5.jpg, false, 5",
-            "testdata/orientation/input/Landscape_6.jpg, false, 6",
-            "testdata/orientation/input/Landscape_7.jpg, false, 7",
-            "testdata/orientation/input/Landscape_8.jpg, false, 8",
-            "testdata/orientation/input/Portrait_0.jpg,  false, 0",
-            "testdata/orientation/input/Portrait_1.jpg,  false, 1",
-            "testdata/orientation/input/Portrait_2.jpg,  false, 2",
-            "testdata/orientation/input/Portrait_3.jpg,  false, 3",
-            "testdata/orientation/input/Portrait_4.jpg,  false, 4",
-            "testdata/orientation/input/Portrait_5.jpg,  false, 5",
-            "testdata/orientation/input/Portrait_6.jpg,  false, 6",
-            "testdata/orientation/input/Portrait_7.jpg,  false, 7",
-            "testdata/orientation/input/Portrait_8.jpg,  false, 8",
-    })
+    @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
     void testMetadataReading(String resourcePath, boolean expectedHasGps, int expectedOrientation) {
         File input = resourceFile(resourcePath);
         ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(input);
