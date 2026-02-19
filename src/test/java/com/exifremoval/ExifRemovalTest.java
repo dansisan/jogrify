@@ -5,8 +5,10 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.GpsDirectory;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.imageio.ImageIO;
@@ -15,8 +17,6 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
@@ -26,62 +26,67 @@ class ExifRemovalTest {
 
     private static final Logger LOG = Logger.getLogger(ExifRemovalTest.class.getName());
 
-    static final Path tempDir = Path.of("build/test-output");
+    static final Path outputDir = Path.of("build/test-output");
 
     @BeforeAll
     static void createOutputDir() throws Exception {
-        Files.createDirectories(tempDir);
+        Files.createDirectories(outputDir);
     }
 
-    // ---- Orientation tests (18 cases) ----
+    // ---- Ground truth: verify our metadata reader agrees with exiftool ----
 
-    static Stream<Arguments> orientationCases() {
-        List<Arguments> cases = new ArrayList<>();
-        for (String prefix : new String[]{"Landscape", "Portrait"}) {
-            for (int i = 0; i <= 8; i++) {
-                cases.add(Arguments.of(prefix + "_" + i + ".jpg"));
-            }
-        }
-        return cases.stream();
+    @ParameterizedTest(name = "metadata: {0}")
+    @CsvSource({
+            // Format inputs — GPS and orientation verified with exiftool
+            "testdata/format/input/gps.jpg,    true,  1",
+            "testdata/format/input/gps.png,    true,  1",
+            "testdata/format/input/gps.tiff,   true,  1",
+            "testdata/format/input/gps.webp,   true,  1",
+            "testdata/format/input/gps.gif,    false, 1",
+            "testdata/format/input/rotate.jpg,  true,  8",
+            "testdata/format/input/rotate.png,  true,  8",
+            "testdata/format/input/rotate.tiff, true,  8",
+            "testdata/format/input/rotate.webp, true,  8",
+            "testdata/format/input/rotate.gif,  false, 1",
+            // Orientation inputs — no GPS, orientation matches filename suffix
+            "testdata/orientation/input/Landscape_0.jpg, false, 0",
+            "testdata/orientation/input/Landscape_1.jpg, false, 1",
+            "testdata/orientation/input/Landscape_2.jpg, false, 2",
+            "testdata/orientation/input/Landscape_3.jpg, false, 3",
+            "testdata/orientation/input/Landscape_4.jpg, false, 4",
+            "testdata/orientation/input/Landscape_5.jpg, false, 5",
+            "testdata/orientation/input/Landscape_6.jpg, false, 6",
+            "testdata/orientation/input/Landscape_7.jpg, false, 7",
+            "testdata/orientation/input/Landscape_8.jpg, false, 8",
+            "testdata/orientation/input/Portrait_0.jpg,  false, 0",
+            "testdata/orientation/input/Portrait_1.jpg,  false, 1",
+            "testdata/orientation/input/Portrait_2.jpg,  false, 2",
+            "testdata/orientation/input/Portrait_3.jpg,  false, 3",
+            "testdata/orientation/input/Portrait_4.jpg,  false, 4",
+            "testdata/orientation/input/Portrait_5.jpg,  false, 5",
+            "testdata/orientation/input/Portrait_6.jpg,  false, 6",
+            "testdata/orientation/input/Portrait_7.jpg,  false, 7",
+            "testdata/orientation/input/Portrait_8.jpg,  false, 8",
+    })
+    void testMetadataReading(String resourcePath, boolean expectedHasGps, int expectedOrientation) {
+        File input = resourceFile(resourcePath);
+        ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(input);
+
+        assertEquals(expectedHasGps, info.hasGps,
+                "GPS detection mismatch for " + resourcePath);
+        assertEquals(expectedOrientation, info.orientation,
+                "Orientation mismatch for " + resourcePath);
     }
 
-    @ParameterizedTest(name = "orientation: {0}")
-    @MethodSource("orientationCases")
-    void testOrientationCorrection(String filename) throws Exception {
-        File input = resourceFile("testdata/orientation/input/" + filename);
-        File expected = resourceFile("testdata/orientation/expected/" + filename);
-
-        File output = processImage(input, filename);
-        copyOriginal(input, filename);
-        copyExpected(expected, filename);
-
-        BufferedImage actualImg = ImageIO.read(output);
-        BufferedImage expectedImg = ImageIO.read(expected);
-
-        assertNotNull(actualImg, "Failed to read actual output");
-        assertNotNull(expectedImg, "Failed to read expected output");
-
-        assertEquals(expectedImg.getWidth(), actualImg.getWidth(),
-                "Width mismatch for " + filename);
-        assertEquals(expectedImg.getHeight(), actualImg.getHeight(),
-                "Height mismatch for " + filename);
-
-        double rmse = computeRMSE(expectedImg, actualImg);
-        assertTrue(rmse < 0.02,
-                "RMSE too high for " + filename + ": " + rmse);
-
-        warnIfLarger(output, expected, filename);
-    }
-
-    // ---- GPS metadata stripping tests (5 cases) ----
-
-    static Stream<Arguments> gpsCases() {
-        return Stream.of("jpg", "png", "gif", "tiff", "webp")
-                .map(ext -> Arguments.of("gps." + ext, ext));
-    }
+    // ---- GPS stripping: files with GPS get processed, GPS removed ----
 
     @ParameterizedTest(name = "gps stripped: {0}")
-    @MethodSource("gpsCases")
+    @CsvSource({
+            "gps.jpg,  jpg",
+            "gps.png,  png",
+            "gps.tiff, tiff",
+            "gps.webp, webp",
+    })
     void testGpsMetadataStripped(String filename, String ext) throws Exception {
         File input = resourceFile("testdata/format/input/" + filename);
         File expected = resourceFile("testdata/format/expected/" + filename);
@@ -104,7 +109,6 @@ class ExifRemovalTest {
                 "Height mismatch for " + filename);
 
         double rmse = computeRMSE(expectedImg, actualImg);
-
         if (isLossless(ext)) {
             assertEquals(0.0, rmse, 1e-9,
                     "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
@@ -116,15 +120,15 @@ class ExifRemovalTest {
         warnIfLarger(output, expected, filename);
     }
 
-    // ---- Rotation tests (5 cases) ----
-
-    static Stream<Arguments> rotationCases() {
-        return Stream.of("jpg", "png", "gif", "tiff", "webp")
-                .map(ext -> Arguments.of("rotate." + ext, ext));
-    }
+    // ---- Rotation + GPS stripping: orientation applied AND GPS removed ----
 
     @ParameterizedTest(name = "rotation: {0}")
-    @MethodSource("rotationCases")
+    @CsvSource({
+            "rotate.jpg,  jpg",
+            "rotate.png,  png",
+            "rotate.tiff, tiff",
+            "rotate.webp, webp",
+    })
     void testRotationApplied(String filename, String ext) throws Exception {
         File input = resourceFile("testdata/format/input/" + filename);
         File expected = resourceFile("testdata/format/expected/" + filename);
@@ -147,7 +151,6 @@ class ExifRemovalTest {
                 "Height mismatch for " + filename);
 
         double rmse = computeRMSE(expectedImg, actualImg);
-
         if (isLossless(ext)) {
             assertEquals(0.0, rmse, 1e-9,
                     "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
@@ -159,28 +162,50 @@ class ExifRemovalTest {
         warnIfLarger(output, expected, filename);
     }
 
+    // ---- No-op: files without GPS are left untouched ----
+
+    static Stream<Arguments> noGpsCases() {
+        Stream.Builder<Arguments> cases = Stream.builder();
+        for (String prefix : new String[]{"Landscape", "Portrait"}) {
+            for (int i = 0; i <= 8; i++) {
+                cases.add(Arguments.of(prefix + "_" + i + ".jpg"));
+            }
+        }
+        cases.add(Arguments.of("gps.gif"));
+        cases.add(Arguments.of("rotate.gif"));
+        return cases.build();
+    }
+
+    @ParameterizedTest(name = "no-op: {0}")
+    @MethodSource("noGpsCases")
+    void testNoGpsLeftUntouched(String filename) throws Exception {
+        String subdir = filename.contains("_") ? "orientation" : "format";
+        File input = resourceFile("testdata/" + subdir + "/input/" + filename);
+
+        File output = processImage(input, filename);
+        copyOriginal(input, filename);
+
+        assertEquals(input.length(), output.length(),
+                filename + " should be untouched (same size) but was re-encoded");
+        assertArrayEquals(Files.readAllBytes(input.toPath()), Files.readAllBytes(output.toPath()),
+                filename + " should be byte-identical to input");
+    }
+
     // ---- Helpers ----
 
     private File processImage(File input, String outputName) throws Exception {
-        ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(input);
-        BufferedImage image = ImageIO.read(input);
-        assertNotNull(image, "Could not decode input: " + input);
-
-        BufferedImage oriented = ExifRemoval.applyOrientation(image, info.orientation);
-
-        String format = ExifRemoval.getFormatName(input.getName());
-        File output = tempDir.resolve(addSuffix(outputName, "_processed")).toFile();
-        ExifRemoval.writeImage(oriented, format, output);
+        File output = outputDir.resolve(addSuffix(outputName, "_processed")).toFile();
+        ExifRemoval.process(input, output);
         return output;
     }
 
     private void copyExpected(File expected, String outputName) throws Exception {
-        Path dest = tempDir.resolve(addSuffix(outputName, "_expected"));
+        Path dest = outputDir.resolve(addSuffix(outputName, "_expected"));
         Files.copy(expected.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private void copyOriginal(File input, String outputName) throws Exception {
-        Path dest = tempDir.resolve(addSuffix(outputName, "_original"));
+        Path dest = outputDir.resolve(addSuffix(outputName, "_original"));
         Files.copy(input.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
     }
 
@@ -218,17 +243,7 @@ class ExifRemovalTest {
             }
         }
 
-        // Normalize to 0-1 range (max channel value is 255)
         return Math.sqrt((double) sumSq / count) / 255.0;
-    }
-
-    private static void assertNotLarger(File output, File expected, String filename) {
-        long outputSize = output.length();
-        long expectedSize = expected.length();
-        double ratio = (double) outputSize / expectedSize;
-        assertTrue(ratio <= 1.10,
-                String.format("%s is %.0f%% larger than reference (%,d vs %,d bytes)",
-                        filename, (ratio - 1) * 100, outputSize, expectedSize));
     }
 
     private static void warnIfLarger(File output, File expected, String filename) {
@@ -248,7 +263,7 @@ class ExifRemovalTest {
     }
 
     private static boolean isLossless(String ext) {
-        return "png".equals(ext) || "tiff".equals(ext) || "gif".equals(ext);
+        return "png".equals(ext) || "tiff".equals(ext);
     }
 
     private File resourceFile(String path) {

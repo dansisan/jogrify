@@ -40,30 +40,29 @@ public class ExifRemoval {
             System.exit(1);
         }
 
+        process(inputFile, outputFile);
+    }
+
+    static void process(File inputFile, File outputFile) throws Exception {
         ImageInfo info = readImageInfo(inputFile);
 
         if (!info.needsProcessing()) {
             if (!inputFile.equals(outputFile)) {
                 Files.copy(inputFile.toPath(), outputFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             }
-            System.out.println("Skipped (no metadata to strip): " + inputFile);
             return;
         }
 
         BufferedImage image = ImageIO.read(inputFile);
 
         if (image == null) {
-            System.err.println("Could not decode image: " + inputFile);
-            System.exit(1);
+            throw new IllegalArgumentException("Could not decode image: " + inputFile);
         }
 
         BufferedImage oriented = applyOrientation(image, info.orientation);
 
         String formatName = getFormatName(inputFile.getName());
         writeImage(oriented, formatName, outputFile);
-
-        System.out.println("Processed: " + inputFile + " -> " + outputFile
-                + " (orientation=" + info.orientation + ", " + oriented.getWidth() + "x" + oriented.getHeight() + ")");
     }
 
     static class ImageInfo {
@@ -98,11 +97,10 @@ public class ExifRemoval {
                     for (Tag tag : dir.getTags()) {
                         String desc = tag.getDescription();
                         if (desc != null && desc.contains("Raw profile type exif")) {
-                            int parsed = parseOrientationFromRawExifProfile(desc);
-                            if (parsed > 0) { orientation = parsed; break; }
+                            ImageInfo pngInfo = parseImageInfoFromRawExifProfile(desc);
+                            if (pngInfo != null) return pngInfo;
                         }
                     }
-                    if (orientation > 1) break;
                 }
             }
 
@@ -114,21 +112,17 @@ public class ExifRemoval {
     }
 
     /**
-     * Parse EXIF orientation from a PNG tEXt "Raw profile type exif" chunk.
+     * Parse EXIF data from a PNG tEXt "Raw profile type exif" chunk.
      * The format is: header lines followed by hex-encoded EXIF bytes.
      */
-    static int parseOrientationFromRawExifProfile(String rawProfile) {
+    static ImageInfo parseImageInfoFromRawExifProfile(String rawProfile) {
         try {
-            // The raw profile has a format like:
-            //   "Raw profile type exif: \nexif\n    9961\n4578696600004d4d..."
-            // We need to extract the hex string, decode it, and parse EXIF from it.
             String[] lines = rawProfile.split("\n");
             StringBuilder hexBuilder = new StringBuilder();
             boolean pastHeader = false;
             for (String line : lines) {
                 String trimmed = line.trim();
                 if (!pastHeader) {
-                    // Skip "Raw profile type exif:", "exif", and the byte count line
                     if (trimmed.matches("[0-9a-fA-F]{10,}")) {
                         pastHeader = true;
                         hexBuilder.append(trimmed);
@@ -139,22 +133,25 @@ public class ExifRemoval {
             }
 
             String hex = hexBuilder.toString();
-            if (hex.isEmpty()) return -1;
+            if (hex.isEmpty()) return null;
 
             byte[] exifBytes = hexToBytes(hex);
 
-            // Parse EXIF from the raw bytes using metadata-extractor's ExifReader
             Metadata exifMetadata = new Metadata();
             new ExifReader().extract(new com.drew.lang.ByteArrayReader(exifBytes), exifMetadata, ExifReader.JPEG_SEGMENT_PREAMBLE.length());
 
+            int orientation = 1;
             ExifIFD0Directory exifDir = exifMetadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
             if (exifDir != null && exifDir.containsTag(ExifIFD0Directory.TAG_ORIENTATION)) {
-                return exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
+                orientation = exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
             }
+
+            boolean hasGps = exifMetadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
+
+            return new ImageInfo(orientation, hasGps);
         } catch (Exception e) {
-            // Failed to parse — fall through
+            return null;
         }
-        return -1;
     }
 
     static byte[] hexToBytes(String hex) {
