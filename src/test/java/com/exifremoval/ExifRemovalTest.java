@@ -38,17 +38,19 @@ class ExifRemovalTest {
 
     @ParameterizedTest(name = "metadata: {0}")
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
-    void testMetadataReading(String resourcePath, boolean expectedHasGps, int expectedOrientation) {
+    void testMetadataReading(String resourcePath, boolean expectedHasExif, boolean expectedHasGps, int expectedOrientation) {
         File input = resourceFile(resourcePath);
         ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(input);
 
+        assertEquals(expectedHasExif, info.hasExif,
+                "EXIF detection mismatch for " + resourcePath);
         assertEquals(expectedHasGps, info.hasGps,
                 "GPS detection mismatch for " + resourcePath);
         assertEquals(expectedOrientation, info.orientation,
                 "Orientation mismatch for " + resourcePath);
     }
 
-    // ---- GPS stripping: files with GPS get processed, GPS removed ----
+    // ---- Metadata stripping: files with EXIF get processed, GPS removed ----
 
     @ParameterizedTest(name = "gps stripped: {0}")
     @CsvSource({
@@ -167,11 +169,11 @@ class ExifRemovalTest {
         }
     }
 
-    // ---- No-op: files without GPS are left untouched ----
+    // ---- No-op: files without EXIF are left untouched ----
 
     @ParameterizedTest(name = "no-op: {0}")
     @CsvSource({"gps.gif", "rotate.gif"})
-    void testNoGpsLeftUntouched(String filename) throws Exception {
+    void testNoExifLeftUntouched(String filename) throws Exception {
         File input = resourceFile("testdata/input/" + filename);
 
         File output = processImage(input, filename);

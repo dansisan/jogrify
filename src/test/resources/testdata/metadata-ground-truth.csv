@@ -1,20 +1,20 @@
-path,                                      hasGps, orientation, source,                                             notes
-testdata/input/gps.jpg,                    true,   1,          iPhone 8 Plus via magick convert,                    GPS-only test; orientation=1 (normal)
-testdata/input/gps.png,                    true,   1,          magick convert from gps.jpg,                         EXIF in eXIf chunk; GPS added by magick
-testdata/input/gps.tiff,                   true,   1,          magick convert from gps.jpg,                         GPS added by magick
-testdata/input/gps.webp,                   true,   1,          magick convert from gps.jpg,                         GPS added by magick
-testdata/input/gps.gif,                    false,  1,          magick convert from gps.jpg,                         GIF has no EXIF support; GPS absent
-testdata/input/rotate.jpg,                 true,   8,          iPhone 11 Pro via magick convert,                    Orientation 8 (rotate 270 CW) + GPS
-testdata/input/rotate.png,                 true,   8,          magick convert from rotateChrome.png,                EXIF in eXIf chunk (not tEXt); GPS coordinates modified by magick
-testdata/input/rotate.tiff,                true,   8,          magick convert from rotate.jpg,                      Orientation 8 + GPS
-testdata/input/rotate.webp,                true,   8,          magick convert from rotate.jpg,                      Orientation 8 + GPS
-testdata/input/rotate.gif,                 false,  1,          magick convert from rotate.jpg,                      GIF has no EXIF support; GPS and orientation absent
-testdata/input/Landscape_0.jpg,            true,   0,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 0 (unspecified); GPS added by magick
-testdata/input/Landscape_1.jpg,            true,   1,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 1 (normal); GPS added by magick
-testdata/input/Landscape_2.jpg,            true,   2,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 2 (flip horizontal); GPS added by magick
-testdata/input/Landscape_3.jpg,            true,   3,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 3 (rotate 180); GPS added by magick
-testdata/input/Landscape_4.jpg,            true,   4,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 4 (flip vertical); GPS added by magick
-testdata/input/Landscape_5.jpg,            true,   5,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 5 (transpose); GPS added by magick
-testdata/input/Landscape_6.jpg,            true,   6,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 6 (rotate 90 CW); GPS added by magick
-testdata/input/Landscape_7.jpg,            true,   7,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 7 (transverse); GPS added by magick
-testdata/input/Landscape_8.jpg,            true,   8,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 8 (rotate 270 CW); GPS added by magick
+path,                                      hasExif, hasGps, orientation, source,                                             notes
+testdata/input/gps.jpg,                    true,    true,   1,          iPhone 8 Plus via magick convert,                    GPS-only test; orientation=1 (normal)
+testdata/input/gps.png,                    true,    true,   1,          magick convert from gps.jpg,                         EXIF in eXIf chunk; GPS added by magick
+testdata/input/gps.tiff,                   true,    true,   1,          magick convert from gps.jpg,                         GPS added by magick
+testdata/input/gps.webp,                   true,    true,   1,          magick convert from gps.jpg,                         GPS added by magick
+testdata/input/gps.gif,                    false,   false,  1,          magick convert from gps.jpg,                         GIF has no EXIF support; GPS absent
+testdata/input/rotate.jpg,                 true,    true,   8,          iPhone 11 Pro via magick convert,                    Orientation 8 (rotate 270 CW) + GPS
+testdata/input/rotate.png,                 true,    true,   8,          magick convert from rotateChrome.png,                EXIF in eXIf chunk (not tEXt); GPS coordinates modified by magick
+testdata/input/rotate.tiff,                true,    true,   8,          magick convert from rotate.jpg,                      Orientation 8 + GPS
+testdata/input/rotate.webp,                true,    true,   8,          magick convert from rotate.jpg,                      Orientation 8 + GPS
+testdata/input/rotate.gif,                 false,   false,  1,          magick convert from rotate.jpg,                      GIF has no EXIF support; GPS and orientation absent
+testdata/input/Landscape_0.jpg,            true,    true,   0,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 0 (unspecified); GPS added by magick
+testdata/input/Landscape_1.jpg,            true,    true,   1,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 1 (normal); GPS added by magick
+testdata/input/Landscape_2.jpg,            true,    true,   2,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 2 (flip horizontal); GPS added by magick
+testdata/input/Landscape_3.jpg,            true,    true,   3,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 3 (rotate 180); GPS added by magick
+testdata/input/Landscape_4.jpg,            true,    true,   4,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 4 (flip vertical); GPS added by magick
+testdata/input/Landscape_5.jpg,            true,    true,   5,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 5 (transpose); GPS added by magick
+testdata/input/Landscape_6.jpg,            true,    true,   6,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 6 (rotate 90 CW); GPS added by magick
+testdata/input/Landscape_7.jpg,            true,    true,   7,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 7 (transverse); GPS added by magick
+testdata/input/Landscape_8.jpg,            true,    true,   8,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 8 (rotate 270 CW); GPS added by magick

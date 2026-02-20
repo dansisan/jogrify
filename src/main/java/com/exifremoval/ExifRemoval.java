@@ -61,7 +61,7 @@ public class ExifRemoval {
 
         switch (formatName) {
             case "jpeg":
-                stripJpegGps(inputFile, outputFile, info.orientation);
+                stripJpegMetadata(inputFile, outputFile, info.orientation);
                 return;
             case "png":
                 stripPngMetadata(inputFile, outputFile, info.orientation);
@@ -83,15 +83,17 @@ public class ExifRemoval {
 
     static class ImageInfo {
         final int orientation;
+        final boolean hasExif;
         final boolean hasGps;
 
-        ImageInfo(int orientation, boolean hasGps) {
+        ImageInfo(int orientation, boolean hasExif, boolean hasGps) {
             this.orientation = orientation;
+            this.hasExif = hasExif;
             this.hasGps = hasGps;
         }
 
         boolean needsProcessing() {
-            return hasGps;
+            return hasExif;
         }
     }
 
@@ -105,6 +107,8 @@ public class ExifRemoval {
 
             // First, try standard EXIF directory (works for JPEG)
             ExifIFD0Directory exifDir = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
+            boolean hasExif = exifDir != null || hasGps;
+
             if (exifDir != null && exifDir.containsTag(ExifIFD0Directory.TAG_ORIENTATION)) {
                 orientation = exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
             } else {
@@ -120,10 +124,10 @@ public class ExifRemoval {
                 }
             }
 
-            return new ImageInfo(orientation, hasGps);
+            return new ImageInfo(orientation, hasExif, hasGps);
         } catch (Exception e) {
-            // No EXIF or unreadable — treat as normal, no GPS
-            return new ImageInfo(1, false);
+            // No EXIF or unreadable — treat as normal, no metadata
+            return new ImageInfo(1, false, false);
         }
     }
 
@@ -164,7 +168,7 @@ public class ExifRemoval {
 
             boolean hasGps = exifMetadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
 
-            return new ImageInfo(orientation, hasGps);
+            return new ImageInfo(orientation, true, hasGps);
         } catch (Exception e) {
             return null;
         }
@@ -307,12 +311,12 @@ public class ExifRemoval {
     }
 
     /**
-     * Losslessly strip GPS metadata from a JPEG file.
+     * Losslessly strip metadata from a JPEG file.
      * Parses JPEG segments, removes APP1 (EXIF/XMP) and APP2 (ICC),
      * inserts a minimal EXIF APP1 with just the orientation tag,
      * and copies all image data verbatim.
      */
-    static void stripJpegGps(File input, File output, int orientation) throws Exception {
+    static void stripJpegMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         if (data.length < 2 || (data[0] & 0xFF) != 0xFF || (data[1] & 0xFF) != 0xD8) {
