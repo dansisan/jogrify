@@ -64,10 +64,10 @@ public class ExifRemoval {
                 stripJpegGps(inputFile, outputFile, info.orientation);
                 return;
             case "png":
-                stripPngMetadata(inputFile, outputFile);
+                stripPngMetadata(inputFile, outputFile, info.orientation);
                 return;
             case "webp":
-                stripWebpMetadata(inputFile, outputFile);
+                stripWebpMetadata(inputFile, outputFile, info.orientation);
                 return;
         }
 
@@ -374,7 +374,7 @@ public class ExifRemoval {
      * We keep image-essential chunks (IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, sBIT, pHYs)
      * and strip metadata chunks (eXIf, tEXt, iTXt, zTXt, iCCP) that may contain GPS/EXIF data.
      */
-    static void stripPngMetadata(File input, File output) throws Exception {
+    static void stripPngMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         // PNG signature: 8 bytes
@@ -387,6 +387,7 @@ public class ExifRemoval {
         // Copy PNG signature
         out.write(data, 0, 8);
 
+        boolean wroteExif = false;
         int pos = 8;
         while (pos + 12 <= data.length) { // minimum chunk: 4 (len) + 4 (type) + 0 (data) + 4 (CRC)
             int chunkLen = readInt(data, pos);
@@ -394,7 +395,11 @@ public class ExifRemoval {
             int totalChunkSize = 12 + chunkLen; // 4 (len) + 4 (type) + data + 4 (CRC)
 
             if (isMetadataChunk(chunkType)) {
-                // Skip metadata chunks
+                // Write orientation eXIf chunk once, right before first stripped chunk
+                if (!wroteExif && orientation > 1 && orientation <= 8) {
+                    writePngExifChunk(out, orientation);
+                    wroteExif = true;
+                }
                 pos += totalChunkSize;
                 continue;
             }
@@ -407,6 +412,65 @@ public class ExifRemoval {
         }
 
         Files.write(output.toPath(), out.toByteArray());
+    }
+
+    /**
+     * Write a PNG eXIf chunk containing only the orientation tag.
+     * PNG eXIf chunk data is raw TIFF/EXIF bytes (no "Exif\0\0" prefix).
+     */
+    static void writePngExifChunk(OutputStream out, int orientation) throws Exception {
+        byte[] tiffData = buildOrientationTiff(orientation);
+        byte[] chunkType = {'e', 'X', 'I', 'f'};
+
+        // Length (big-endian)
+        writeInt(out, tiffData.length);
+        // Chunk type
+        out.write(chunkType);
+        // Data
+        out.write(tiffData);
+        // CRC32 over type + data
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(chunkType);
+        crc.update(tiffData);
+        writeInt(out, (int) crc.getValue());
+    }
+
+    private static void writeInt(OutputStream out, int value) throws Exception {
+        out.write((value >> 24) & 0xFF);
+        out.write((value >> 16) & 0xFF);
+        out.write((value >> 8) & 0xFF);
+        out.write(value & 0xFF);
+    }
+
+    /**
+     * Build a minimal TIFF structure with just the orientation tag.
+     * Shared by PNG (eXIf) and WebP (EXIF) chunk writers.
+     */
+    static byte[] buildOrientationTiff(int orientation) {
+        ByteArrayOutputStream tiff = new ByteArrayOutputStream();
+
+        // TIFF header (big-endian)
+        tiff.write('M'); tiff.write('M');       // byte order
+        tiff.write(0); tiff.write(0x2A);        // magic
+        tiff.write(0); tiff.write(0);
+        tiff.write(0); tiff.write(8);           // offset to IFD0
+
+        // IFD0: 1 entry
+        tiff.write(0); tiff.write(1);
+
+        // Orientation tag (12 bytes)
+        tiff.write(0x01); tiff.write(0x12);     // tag = 0x0112
+        tiff.write(0); tiff.write(3);           // type = SHORT
+        tiff.write(0); tiff.write(0);
+        tiff.write(0); tiff.write(1);           // count = 1
+        tiff.write(0); tiff.write(orientation);
+        tiff.write(0); tiff.write(0);
+
+        // Next IFD offset = 0
+        tiff.write(0); tiff.write(0);
+        tiff.write(0); tiff.write(0);
+
+        return tiff.toByteArray();
     }
 
     private static boolean isMetadataChunk(String chunkType) {
@@ -435,7 +499,7 @@ public class ExifRemoval {
      * Each chunk: [4-byte FourCC][4-byte size][data][optional pad byte].
      * We strip EXIF and XMP chunks, keep everything else.
      */
-    static void stripWebpMetadata(File input, File output) throws Exception {
+    static void stripWebpMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         // RIFF header: "RIFF" + 4-byte size + "WEBP"
@@ -449,6 +513,7 @@ public class ExifRemoval {
         // Write RIFF header placeholder (we'll fix the size at the end)
         out.write(data, 0, 12); // "RIFF" + size + "WEBP"
 
+        boolean wroteExif = false;
         int pos = 12;
         while (pos + 8 <= data.length) {
             String fourCC = new String(data, pos, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
@@ -457,7 +522,11 @@ public class ExifRemoval {
             int totalChunkSize = 8 + paddedSize;    // 4 (FourCC) + 4 (size) + padded data
 
             if ("EXIF".equals(fourCC) || "XMP ".equals(fourCC)) {
-                // Skip metadata chunks
+                // Write orientation EXIF chunk once, replacing the first stripped chunk
+                if (!wroteExif && orientation > 1 && orientation <= 8) {
+                    writeWebpExifChunk(out, orientation);
+                    wroteExif = true;
+                }
                 pos += totalChunkSize;
                 continue;
             }
@@ -487,43 +556,40 @@ public class ExifRemoval {
     }
 
     /**
+     * Write a WebP EXIF chunk containing only the orientation tag.
+     * WebP EXIF chunk: "EXIF" + little-endian size + raw EXIF/TIFF bytes.
+     */
+    static void writeWebpExifChunk(OutputStream out, int orientation) throws Exception {
+        byte[] tiffData = buildOrientationTiff(orientation);
+
+        // FourCC
+        out.write(new byte[]{'E', 'X', 'I', 'F'});
+        // Size (little-endian)
+        int size = tiffData.length;
+        out.write(size & 0xFF);
+        out.write((size >> 8) & 0xFF);
+        out.write((size >> 16) & 0xFF);
+        out.write((size >> 24) & 0xFF);
+        // Data
+        out.write(tiffData);
+        // Pad to even size
+        if (size % 2 != 0) out.write(0);
+    }
+
+    /**
      * Write a minimal EXIF APP1 segment containing only the orientation tag.
+     * JPEG APP1: FF E1 + length + "Exif\0\0" + TIFF data.
      */
     static void writeOrientationApp1(OutputStream out, int orientation) throws Exception {
-        ByteArrayOutputStream exif = new ByteArrayOutputStream();
+        byte[] tiffData = buildOrientationTiff(orientation);
+        byte[] prefix = {'E', 'x', 'i', 'f', 0, 0};
 
-        // Exif header
-        exif.write(new byte[]{'E', 'x', 'i', 'f', 0, 0});
-
-        // TIFF header (big-endian)
-        exif.write('M'); exif.write('M');       // byte order: big-endian
-        exif.write(0); exif.write(0x2A);        // TIFF magic
-        exif.write(0); exif.write(0);
-        exif.write(0); exif.write(8);           // offset to IFD0
-
-        // IFD0: 1 entry
-        exif.write(0); exif.write(1);           // entry count
-
-        // Orientation tag (12 bytes)
-        exif.write(0x01); exif.write(0x12);     // tag = 0x0112 (Orientation)
-        exif.write(0); exif.write(3);           // type = SHORT
-        exif.write(0); exif.write(0);
-        exif.write(0); exif.write(1);           // count = 1
-        exif.write(0); exif.write(orientation); // value (SHORT, big-endian)
-        exif.write(0); exif.write(0);           // padding
-
-        // Next IFD offset = 0 (no more IFDs)
-        exif.write(0); exif.write(0);
-        exif.write(0); exif.write(0);
-
-        byte[] exifData = exif.toByteArray();
-
-        // APP1 marker + length
         out.write(0xFF);
         out.write(0xE1);
-        int len = exifData.length + 2; // +2 for length field itself
+        int len = prefix.length + tiffData.length + 2; // +2 for length field itself
         out.write((len >> 8) & 0xFF);
         out.write(len & 0xFF);
-        out.write(exifData);
+        out.write(prefix);
+        out.write(tiffData);
     }
 }

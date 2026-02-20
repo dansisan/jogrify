@@ -142,11 +142,7 @@ class ExifRemovalTest {
 
         assertNoGpsMetadata(output);
 
-        if ("jpg".equals(ext) || "png".equals(ext) || "webp".equals(ext)) {
-            // Lossless strip, orientation preserved in file
-            assertTrue(output.length() <= input.length(),
-                    filename + " output should not be larger than input");
-        } else {
+        if ("tiff".equals(ext)) {
             // TIFF: still re-encoded with orientation applied
             BufferedImage actualImg = ImageIO.read(output);
             BufferedImage expectedImg = ImageIO.read(expected);
@@ -164,6 +160,10 @@ class ExifRemovalTest {
                     "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
 
             warnIfDifferent(output, expected, filename);
+        } else {
+            // JPEG, PNG, WebP: lossless strip — output smaller than input
+            assertTrue(output.length() <= input.length(),
+                    filename + " output should not be larger than input");
         }
     }
 
