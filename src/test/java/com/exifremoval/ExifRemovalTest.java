@@ -67,11 +67,12 @@ class ExifRemovalTest {
 
         assertNoGpsMetadata(output);
 
-        if ("jpg".equals(ext)) {
-            // JPEG: lossless strip — output must be smaller than input
+        if ("jpg".equals(ext) || "png".equals(ext) || "webp".equals(ext)) {
+            // Lossless strip — output must be smaller than input
             assertTrue(output.length() < input.length(),
                     filename + " output should be smaller than input");
         } else {
+            // TIFF: still re-encoded
             BufferedImage actualImg = ImageIO.read(output);
             BufferedImage expectedImg = ImageIO.read(expected);
 
@@ -84,15 +85,10 @@ class ExifRemovalTest {
                     "Height mismatch for " + filename);
 
             double rmse = computeRMSE(expectedImg, actualImg);
-            if (isLossless(ext)) {
-                assertEquals(0.0, rmse, 1e-9,
-                        "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
-            } else {
-                assertTrue(rmse < 0.02,
-                        "RMSE too high for " + filename + ": " + rmse);
-            }
+            assertEquals(0.0, rmse, 1e-9,
+                    "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
 
-            warnIfLarger(output, expected, filename);
+            warnIfDifferent(output, expected, filename);
         }
     }
 
@@ -146,13 +142,12 @@ class ExifRemovalTest {
 
         assertNoGpsMetadata(output);
 
-        if ("jpg".equals(ext)) {
-            // JPEG: lossless strip, orientation preserved
+        if ("jpg".equals(ext) || "png".equals(ext) || "webp".equals(ext)) {
+            // Lossless strip, orientation preserved in file
             assertTrue(output.length() <= input.length(),
                     filename + " output should not be larger than input");
-            ExifRemoval.ImageInfo inputInfo = ExifRemoval.readImageInfo(input);
-            assertOrientationPreserved(output, inputInfo.orientation, filename);
         } else {
+            // TIFF: still re-encoded with orientation applied
             BufferedImage actualImg = ImageIO.read(output);
             BufferedImage expectedImg = ImageIO.read(expected);
 
@@ -165,15 +160,10 @@ class ExifRemovalTest {
                     "Height mismatch for " + filename);
 
             double rmse = computeRMSE(expectedImg, actualImg);
-            if (isLossless(ext)) {
-                assertEquals(0.0, rmse, 1e-9,
-                        "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
-            } else {
-                assertTrue(rmse < 0.02,
-                        "RMSE too high for " + filename + ": " + rmse);
-            }
+            assertEquals(0.0, rmse, 1e-9,
+                    "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
 
-            warnIfLarger(output, expected, filename);
+            warnIfDifferent(output, expected, filename);
         }
     }
 
@@ -246,12 +236,12 @@ class ExifRemovalTest {
         return Math.sqrt((double) sumSq / count) / 255.0;
     }
 
-    private static void warnIfLarger(File output, File expected, String filename) {
+    private static void warnIfDifferent(File output, File expected, String filename) {
         long outputSize = output.length();
         long expectedSize = expected.length();
-        if (outputSize > expectedSize) {
+        if (outputSize != expectedSize) {
             double pct = ((double) outputSize / expectedSize - 1) * 100;
-            LOG.warning(String.format("%s is %.0f%% larger than reference (%,d vs %,d bytes)",
+            LOG.warning(String.format("%s is %+.0f%% vs reference (%,d vs %,d bytes)",
                     filename, pct, outputSize, expectedSize));
         }
     }

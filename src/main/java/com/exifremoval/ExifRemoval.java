@@ -59,9 +59,16 @@ public class ExifRemoval {
 
         String formatName = getFormatName(inputFile.getName());
 
-        if ("jpeg".equals(formatName)) {
-            stripJpegGps(inputFile, outputFile, info.orientation);
-            return;
+        switch (formatName) {
+            case "jpeg":
+                stripJpegGps(inputFile, outputFile, info.orientation);
+                return;
+            case "png":
+                stripPngMetadata(inputFile, outputFile);
+                return;
+            case "webp":
+                stripWebpMetadata(inputFile, outputFile);
+                return;
         }
 
         BufferedImage image = ImageIO.read(inputFile);
@@ -359,6 +366,124 @@ public class ExifRemoval {
         }
 
         Files.write(output.toPath(), out.toByteArray());
+    }
+
+    /**
+     * Losslessly strip metadata from a PNG file.
+     * PNG files are a sequence of chunks: [4-byte length][4-byte type][data][4-byte CRC].
+     * We keep image-essential chunks (IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, sBIT, pHYs)
+     * and strip metadata chunks (eXIf, tEXt, iTXt, zTXt, iCCP) that may contain GPS/EXIF data.
+     */
+    static void stripPngMetadata(File input, File output) throws Exception {
+        byte[] data = Files.readAllBytes(input.toPath());
+
+        // PNG signature: 8 bytes
+        if (data.length < 8 || data[0] != (byte) 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G') {
+            throw new IllegalArgumentException("Not a valid PNG file: " + input);
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+
+        // Copy PNG signature
+        out.write(data, 0, 8);
+
+        int pos = 8;
+        while (pos + 12 <= data.length) { // minimum chunk: 4 (len) + 4 (type) + 0 (data) + 4 (CRC)
+            int chunkLen = readInt(data, pos);
+            String chunkType = new String(data, pos + 4, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            int totalChunkSize = 12 + chunkLen; // 4 (len) + 4 (type) + data + 4 (CRC)
+
+            if (isMetadataChunk(chunkType)) {
+                // Skip metadata chunks
+                pos += totalChunkSize;
+                continue;
+            }
+
+            // Copy chunk as-is
+            out.write(data, pos, totalChunkSize);
+            pos += totalChunkSize;
+
+            if ("IEND".equals(chunkType)) break;
+        }
+
+        Files.write(output.toPath(), out.toByteArray());
+    }
+
+    private static boolean isMetadataChunk(String chunkType) {
+        switch (chunkType) {
+            case "eXIf":  // EXIF data
+            case "tEXt":  // text metadata (may contain raw EXIF profile)
+            case "iTXt":  // international text (may contain XMP)
+            case "zTXt":  // compressed text
+            case "iCCP":  // ICC color profile
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static int readInt(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 24)
+             | ((data[offset + 1] & 0xFF) << 16)
+             | ((data[offset + 2] & 0xFF) << 8)
+             |  (data[offset + 3] & 0xFF);
+    }
+
+    /**
+     * Losslessly strip metadata from a WebP file.
+     * WebP uses RIFF container: "RIFF" [size] "WEBP" followed by chunks.
+     * Each chunk: [4-byte FourCC][4-byte size][data][optional pad byte].
+     * We strip EXIF and XMP chunks, keep everything else.
+     */
+    static void stripWebpMetadata(File input, File output) throws Exception {
+        byte[] data = Files.readAllBytes(input.toPath());
+
+        // RIFF header: "RIFF" + 4-byte size + "WEBP"
+        if (data.length < 12 || data[0] != 'R' || data[1] != 'I' || data[2] != 'F' || data[3] != 'F'
+                || data[8] != 'W' || data[9] != 'E' || data[10] != 'B' || data[11] != 'P') {
+            throw new IllegalArgumentException("Not a valid WebP file: " + input);
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+
+        // Write RIFF header placeholder (we'll fix the size at the end)
+        out.write(data, 0, 12); // "RIFF" + size + "WEBP"
+
+        int pos = 12;
+        while (pos + 8 <= data.length) {
+            String fourCC = new String(data, pos, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            int chunkSize = readIntLE(data, pos + 4);
+            int paddedSize = (chunkSize + 1) & ~1; // chunks are padded to even size
+            int totalChunkSize = 8 + paddedSize;    // 4 (FourCC) + 4 (size) + padded data
+
+            if ("EXIF".equals(fourCC) || "XMP ".equals(fourCC)) {
+                // Skip metadata chunks
+                pos += totalChunkSize;
+                continue;
+            }
+
+            // Copy chunk as-is
+            int bytesToCopy = Math.min(totalChunkSize, data.length - pos);
+            out.write(data, pos, bytesToCopy);
+            pos += totalChunkSize;
+        }
+
+        // Fix RIFF size field (total file size - 8)
+        byte[] result = out.toByteArray();
+        int riffSize = result.length - 8;
+        result[4] = (byte) (riffSize & 0xFF);
+        result[5] = (byte) ((riffSize >> 8) & 0xFF);
+        result[6] = (byte) ((riffSize >> 16) & 0xFF);
+        result[7] = (byte) ((riffSize >> 24) & 0xFF);
+
+        Files.write(output.toPath(), result);
+    }
+
+    private static int readIntLE(byte[] data, int offset) {
+        return  (data[offset] & 0xFF)
+             | ((data[offset + 1] & 0xFF) << 8)
+             | ((data[offset + 2] & 0xFF) << 16)
+             | ((data[offset + 3] & 0xFF) << 24);
     }
 
     /**
