@@ -58,8 +58,8 @@ class ExifRemovalTest {
             "gps.webp, webp",
     })
     void testGpsMetadataStripped(String filename, String ext) throws Exception {
-        File input = resourceFile("testdata/format/input/" + filename);
-        File expected = resourceFile("testdata/format/expected/" + filename);
+        File input = resourceFile("testdata/input/" + filename);
+        File expected = resourceFile("testdata/expected/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
@@ -107,7 +107,7 @@ class ExifRemovalTest {
     @ParameterizedTest(name = "orientation: {0}")
     @MethodSource("orientationCases")
     void testOrientationPreserved(String filename) throws Exception {
-        File input = resourceFile("testdata/orientation/input/" + filename);
+        File input = resourceFile("testdata/input/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
@@ -133,8 +133,8 @@ class ExifRemovalTest {
             "rotate.webp, webp",
     })
     void testRotationApplied(String filename, String ext) throws Exception {
-        File input = resourceFile("testdata/format/input/" + filename);
-        File expected = resourceFile("testdata/format/expected/" + filename);
+        File input = resourceFile("testdata/input/" + filename);
+        File expected = resourceFile("testdata/expected/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
@@ -172,7 +172,7 @@ class ExifRemovalTest {
     @ParameterizedTest(name = "no-op: {0}")
     @CsvSource({"gps.gif", "rotate.gif"})
     void testNoGpsLeftUntouched(String filename) throws Exception {
-        File input = resourceFile("testdata/format/input/" + filename);
+        File input = resourceFile("testdata/input/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
