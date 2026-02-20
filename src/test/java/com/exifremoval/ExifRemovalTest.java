@@ -2,10 +2,10 @@ package com.exifremoval;
 
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.GpsDirectory;
 
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvFileSource;
@@ -67,27 +67,64 @@ class ExifRemovalTest {
 
         assertNoGpsMetadata(output);
 
-        BufferedImage actualImg = ImageIO.read(output);
-        BufferedImage expectedImg = ImageIO.read(expected);
-
-        assertNotNull(actualImg, "Failed to read actual output");
-        assertNotNull(expectedImg, "Failed to read expected output");
-
-        assertEquals(expectedImg.getWidth(), actualImg.getWidth(),
-                "Width mismatch for " + filename);
-        assertEquals(expectedImg.getHeight(), actualImg.getHeight(),
-                "Height mismatch for " + filename);
-
-        double rmse = computeRMSE(expectedImg, actualImg);
-        if (isLossless(ext)) {
-            assertEquals(0.0, rmse, 1e-9,
-                    "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
+        if ("jpg".equals(ext)) {
+            // JPEG: lossless strip — output must be smaller than input
+            assertTrue(output.length() < input.length(),
+                    filename + " output should be smaller than input");
         } else {
-            assertTrue(rmse < 0.02,
-                    "RMSE too high for " + filename + ": " + rmse);
-        }
+            BufferedImage actualImg = ImageIO.read(output);
+            BufferedImage expectedImg = ImageIO.read(expected);
 
-        warnIfLarger(output, expected, filename);
+            assertNotNull(actualImg, "Failed to read actual output");
+            assertNotNull(expectedImg, "Failed to read expected output");
+
+            assertEquals(expectedImg.getWidth(), actualImg.getWidth(),
+                    "Width mismatch for " + filename);
+            assertEquals(expectedImg.getHeight(), actualImg.getHeight(),
+                    "Height mismatch for " + filename);
+
+            double rmse = computeRMSE(expectedImg, actualImg);
+            if (isLossless(ext)) {
+                assertEquals(0.0, rmse, 1e-9,
+                        "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
+            } else {
+                assertTrue(rmse < 0.02,
+                        "RMSE too high for " + filename + ": " + rmse);
+            }
+
+            warnIfLarger(output, expected, filename);
+        }
+    }
+
+    // ---- Orientation correction + GPS stripping (18 cases) ----
+
+    static Stream<Arguments> orientationCases() {
+        Stream.Builder<Arguments> cases = Stream.builder();
+        for (String prefix : new String[]{"Landscape", "Portrait"}) {
+            for (int i = 0; i <= 8; i++) {
+                cases.add(Arguments.of(prefix + "_" + i + ".jpg"));
+            }
+        }
+        return cases.build();
+    }
+
+    @ParameterizedTest(name = "orientation: {0}")
+    @MethodSource("orientationCases")
+    void testOrientationPreserved(String filename) throws Exception {
+        File input = resourceFile("testdata/orientation/input/" + filename);
+
+        File output = processImage(input, filename);
+        copyOriginal(input, filename);
+
+        assertNoGpsMetadata(output);
+
+        // Output should be smaller than input (metadata stripped)
+        assertTrue(output.length() <= input.length(),
+                filename + " output should not be larger than input");
+
+        // Orientation tag should be preserved
+        ExifRemoval.ImageInfo inputInfo = ExifRemoval.readImageInfo(input);
+        assertOrientationPreserved(output, inputInfo.orientation, filename);
     }
 
     // ---- Rotation + GPS stripping: orientation applied AND GPS removed ----
@@ -109,54 +146,47 @@ class ExifRemovalTest {
 
         assertNoGpsMetadata(output);
 
-        BufferedImage actualImg = ImageIO.read(output);
-        BufferedImage expectedImg = ImageIO.read(expected);
-
-        assertNotNull(actualImg, "Failed to read actual output");
-        assertNotNull(expectedImg, "Failed to read expected output");
-
-        assertEquals(expectedImg.getWidth(), actualImg.getWidth(),
-                "Width mismatch for " + filename);
-        assertEquals(expectedImg.getHeight(), actualImg.getHeight(),
-                "Height mismatch for " + filename);
-
-        double rmse = computeRMSE(expectedImg, actualImg);
-        if (isLossless(ext)) {
-            assertEquals(0.0, rmse, 1e-9,
-                    "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
+        if ("jpg".equals(ext)) {
+            // JPEG: lossless strip, orientation preserved
+            assertTrue(output.length() <= input.length(),
+                    filename + " output should not be larger than input");
+            ExifRemoval.ImageInfo inputInfo = ExifRemoval.readImageInfo(input);
+            assertOrientationPreserved(output, inputInfo.orientation, filename);
         } else {
-            assertTrue(rmse < 0.02,
-                    "RMSE too high for " + filename + ": " + rmse);
-        }
+            BufferedImage actualImg = ImageIO.read(output);
+            BufferedImage expectedImg = ImageIO.read(expected);
 
-        warnIfLarger(output, expected, filename);
+            assertNotNull(actualImg, "Failed to read actual output");
+            assertNotNull(expectedImg, "Failed to read expected output");
+
+            assertEquals(expectedImg.getWidth(), actualImg.getWidth(),
+                    "Width mismatch for " + filename);
+            assertEquals(expectedImg.getHeight(), actualImg.getHeight(),
+                    "Height mismatch for " + filename);
+
+            double rmse = computeRMSE(expectedImg, actualImg);
+            if (isLossless(ext)) {
+                assertEquals(0.0, rmse, 1e-9,
+                        "Lossless format " + filename + " should have RMSE == 0 but got " + rmse);
+            } else {
+                assertTrue(rmse < 0.02,
+                        "RMSE too high for " + filename + ": " + rmse);
+            }
+
+            warnIfLarger(output, expected, filename);
+        }
     }
 
     // ---- No-op: files without GPS are left untouched ----
 
-    static Stream<Arguments> noGpsCases() {
-        Stream.Builder<Arguments> cases = Stream.builder();
-        for (String prefix : new String[]{"Landscape", "Portrait"}) {
-            for (int i = 0; i <= 8; i++) {
-                cases.add(Arguments.of(prefix + "_" + i + ".jpg"));
-            }
-        }
-        cases.add(Arguments.of("gps.gif"));
-        cases.add(Arguments.of("rotate.gif"));
-        return cases.build();
-    }
-
     @ParameterizedTest(name = "no-op: {0}")
-    @MethodSource("noGpsCases")
+    @CsvSource({"gps.gif", "rotate.gif"})
     void testNoGpsLeftUntouched(String filename) throws Exception {
-        String subdir = filename.contains("_") ? "orientation" : "format";
-        File input = resourceFile("testdata/" + subdir + "/input/" + filename);
+        File input = resourceFile("testdata/format/input/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
 
-        assertEquals(input.length(), output.length(),
-                filename + " should be untouched (same size) but was re-encoded");
         assertArrayEquals(Files.readAllBytes(input.toPath()), Files.readAllBytes(output.toPath()),
                 filename + " should be byte-identical to input");
     }
@@ -223,6 +253,24 @@ class ExifRemovalTest {
             double pct = ((double) outputSize / expectedSize - 1) * 100;
             LOG.warning(String.format("%s is %.0f%% larger than reference (%,d vs %,d bytes)",
                     filename, pct, outputSize, expectedSize));
+        }
+    }
+
+    private static void assertOrientationPreserved(File file, int expectedOrientation, String filename) throws Exception {
+        Metadata metadata = ImageMetadataReader.readMetadata(file);
+        ExifIFD0Directory exifDir = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
+        if (expectedOrientation <= 1) {
+            // Orientation 0 or 1 (normal) — tag may be absent, that's fine
+            if (exifDir != null && exifDir.containsTag(ExifIFD0Directory.TAG_ORIENTATION)) {
+                assertEquals(expectedOrientation, exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION),
+                        "Orientation mismatch for " + filename);
+            }
+        } else {
+            assertNotNull(exifDir, "EXIF directory missing in " + filename);
+            assertTrue(exifDir.containsTag(ExifIFD0Directory.TAG_ORIENTATION),
+                    "Orientation tag missing in " + filename);
+            assertEquals(expectedOrientation, exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION),
+                    "Orientation mismatch for " + filename);
         }
     }
 

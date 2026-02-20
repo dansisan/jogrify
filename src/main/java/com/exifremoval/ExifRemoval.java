@@ -19,11 +19,15 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
+import java.util.logging.Logger;
 
 public class ExifRemoval {
+
+    private static final Logger LOG = Logger.getLogger(ExifRemoval.class.getName());
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
@@ -53,6 +57,13 @@ public class ExifRemoval {
             return;
         }
 
+        String formatName = getFormatName(inputFile.getName());
+
+        if ("jpeg".equals(formatName)) {
+            stripJpegGps(inputFile, outputFile, info.orientation);
+            return;
+        }
+
         BufferedImage image = ImageIO.read(inputFile);
 
         if (image == null) {
@@ -60,8 +71,6 @@ public class ExifRemoval {
         }
 
         BufferedImage oriented = applyOrientation(image, info.orientation);
-
-        String formatName = getFormatName(inputFile.getName());
         writeImage(oriented, formatName, outputFile);
     }
 
@@ -248,9 +257,7 @@ public class ExifRemoval {
     }
 
     static void writeImage(BufferedImage image, String format, File output) throws Exception {
-        if ("jpeg".equals(format)) {
-            writeWithQuality(image, "jpeg", output, 0.85f);
-        } else if ("webp".equals(format)) {
+        if ("webp".equals(format)) {
             writeWithQuality(image, "webp", output, 0.80f);
         } else if ("png".equals(format)) {
             writeWithQuality(image, "png", output, 0.0f);
@@ -290,5 +297,108 @@ public class ExifRemoval {
         } finally {
             writer.dispose();
         }
+    }
+
+    /**
+     * Losslessly strip GPS metadata from a JPEG file.
+     * Parses JPEG segments, removes APP1 (EXIF/XMP) and APP2 (ICC),
+     * inserts a minimal EXIF APP1 with just the orientation tag,
+     * and copies all image data verbatim.
+     */
+    static void stripJpegGps(File input, File output, int orientation) throws Exception {
+        byte[] data = Files.readAllBytes(input.toPath());
+
+        if (data.length < 2 || (data[0] & 0xFF) != 0xFF || (data[1] & 0xFF) != 0xD8) {
+            throw new IllegalArgumentException("Not a valid JPEG file: " + input);
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+
+        // Write SOI
+        out.write(0xFF);
+        out.write(0xD8);
+
+        // Write minimal EXIF with orientation (skip if orientation == 1, the default)
+        if (orientation > 1 && orientation <= 8) {
+            writeOrientationApp1(out, orientation);
+        }
+
+        int pos = 2; // skip SOI
+        while (pos < data.length - 1) {
+            if ((data[pos] & 0xFF) != 0xFF) {
+                // Copy remaining bytes (shouldn't happen in well-formed JPEG header)
+                out.write(data, pos, data.length - pos);
+                break;
+            }
+
+            int marker = data[pos + 1] & 0xFF;
+
+            if (marker == 0xD9) { // EOI
+                out.write(data, pos, data.length - pos);
+                break;
+            }
+
+            if (marker == 0xDA) { // SOS — copy everything from here to end
+                out.write(data, pos, data.length - pos);
+                break;
+            }
+
+            // Read segment length (2 bytes, big-endian, includes itself)
+            int len = ((data[pos + 2] & 0xFF) << 8) | (data[pos + 3] & 0xFF);
+            int segmentSize = 2 + len; // 2 for marker bytes + length (which includes its own 2 bytes)
+
+            // Skip APP1 (0xE1) and APP2 (0xE2) — these contain EXIF, XMP, ICC
+            if (marker == 0xE1 || marker == 0xE2) {
+                pos += segmentSize;
+                continue;
+            }
+
+            // Copy all other segments as-is
+            out.write(data, pos, segmentSize);
+            pos += segmentSize;
+        }
+
+        Files.write(output.toPath(), out.toByteArray());
+    }
+
+    /**
+     * Write a minimal EXIF APP1 segment containing only the orientation tag.
+     */
+    static void writeOrientationApp1(OutputStream out, int orientation) throws Exception {
+        ByteArrayOutputStream exif = new ByteArrayOutputStream();
+
+        // Exif header
+        exif.write(new byte[]{'E', 'x', 'i', 'f', 0, 0});
+
+        // TIFF header (big-endian)
+        exif.write('M'); exif.write('M');       // byte order: big-endian
+        exif.write(0); exif.write(0x2A);        // TIFF magic
+        exif.write(0); exif.write(0);
+        exif.write(0); exif.write(8);           // offset to IFD0
+
+        // IFD0: 1 entry
+        exif.write(0); exif.write(1);           // entry count
+
+        // Orientation tag (12 bytes)
+        exif.write(0x01); exif.write(0x12);     // tag = 0x0112 (Orientation)
+        exif.write(0); exif.write(3);           // type = SHORT
+        exif.write(0); exif.write(0);
+        exif.write(0); exif.write(1);           // count = 1
+        exif.write(0); exif.write(orientation); // value (SHORT, big-endian)
+        exif.write(0); exif.write(0);           // padding
+
+        // Next IFD offset = 0 (no more IFDs)
+        exif.write(0); exif.write(0);
+        exif.write(0); exif.write(0);
+
+        byte[] exifData = exif.toByteArray();
+
+        // APP1 marker + length
+        out.write(0xFF);
+        out.write(0xE1);
+        int len = exifData.length + 2; // +2 for length field itself
+        out.write((len >> 8) & 0xFF);
+        out.write(len & 0xFF);
+        out.write(exifData);
     }
 }
