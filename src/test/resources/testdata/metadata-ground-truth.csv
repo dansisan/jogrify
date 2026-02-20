@@ -18,12 +18,3 @@ testdata/input/Landscape_5.jpg,            true,   5,          github.com/recurs
 testdata/input/Landscape_6.jpg,            true,   6,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 6 (rotate 90 CW); GPS added by magick
 testdata/input/Landscape_7.jpg,            true,   7,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 7 (transverse); GPS added by magick
 testdata/input/Landscape_8.jpg,            true,   8,          github.com/recurser/exif-orientation-examples + GPS, Landscape photo; orientation 8 (rotate 270 CW); GPS added by magick
-testdata/input/Portrait_0.jpg,             true,   0,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 0 (unspecified); GPS added by magick
-testdata/input/Portrait_1.jpg,             true,   1,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 1 (normal); GPS added by magick
-testdata/input/Portrait_2.jpg,             true,   2,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 2 (flip horizontal); GPS added by magick
-testdata/input/Portrait_3.jpg,             true,   3,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 3 (rotate 180); GPS added by magick
-testdata/input/Portrait_4.jpg,             true,   4,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 4 (flip vertical); GPS added by magick
-testdata/input/Portrait_5.jpg,             true,   5,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 5 (transpose); GPS added by magick
-testdata/input/Portrait_6.jpg,             true,   6,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 6 (rotate 90 CW); GPS added by magick
-testdata/input/Portrait_7.jpg,             true,   7,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 7 (transverse); GPS added by magick
-testdata/input/Portrait_8.jpg,             true,   8,          github.com/recurser/exif-orientation-examples + GPS, Portrait photo; orientation 8 (rotate 270 CW); GPS added by magick

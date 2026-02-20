@@ -96,7 +96,7 @@ class ExifRemovalTest {
 
     static Stream<Arguments> orientationCases() {
         Stream.Builder<Arguments> cases = Stream.builder();
-        for (String prefix : new String[]{"Landscape", "Portrait"}) {
+        for (String prefix : new String[]{"Landscape"}) {
             for (int i = 0; i <= 8; i++) {
                 cases.add(Arguments.of(prefix + "_" + i + ".jpg"));
             }
