@@ -14,9 +14,9 @@ JPEG, PNG, GIF, TIFF, WebP
 
 **WebP:** EXIF and XMP RIFF chunks. Image data is copied verbatim.
 
-**TIFF, GIF:** Re-encoded via Java ImageIO with metadata omitted.
+**TIFF, GIF:** Re-encoded via Java ImageIO with metadata omitted. TIFF interleaves metadata with image data in its IFD structure, so lossless segment stripping isn't possible — the image is decoded, the orientation transform is applied as a pixel rotation, and then re-encoded clean.
 
-Orientation is preserved: if the input has a non-trivial EXIF orientation tag, the output retains a minimal EXIF segment containing only that tag.
+**Orientation handling:** For JPEG, PNG, and WebP, the orientation tag is preserved in a minimal EXIF segment so that downstream tools can apply it. For TIFF and GIF (which are re-encoded), the orientation is applied as a pixel transform during re-encoding.
 
 ## Usage
 
