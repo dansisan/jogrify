@@ -24,6 +24,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,12 +59,15 @@ class ExifToolComparisonTest {
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
     void testStrippedOutputHasNoSensitiveMetadata(
             String resourcePath, boolean hasExif, boolean hasGps, int orientation,
-            boolean hasIptc, boolean hasXmp, boolean hasIcc, boolean hasMakerNotes) {
+            boolean hasIptc, boolean hasXmp, boolean hasIcc, boolean hasMakerNotes) throws Exception {
 
         assumeTrue(hasExif || hasIptc, "Skipping file without EXIF or IPTC");
 
         File input = resourceFile(resourcePath);
-        File output = outputDir.resolve(basename(resourcePath)).toFile();
+        String base = basename(resourcePath);
+        Files.copy(input.toPath(), outputDir.resolve("original_" + base),
+                StandardCopyOption.REPLACE_EXISTING);
+        File output = outputDir.resolve(base).toFile();
         assertDoesNotThrow(() -> ExifRemoval.process(input, output),
                 "Processing failed for " + resourcePath);
 
