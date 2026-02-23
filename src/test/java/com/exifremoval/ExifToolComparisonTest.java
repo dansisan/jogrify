@@ -129,7 +129,7 @@ class ExifToolComparisonTest {
         assumeFalse(isTiff(resourcePath), "TIFF applies orientation as pixel transform");
 
         File input = resourceFile(resourcePath);
-        File output = outputDir.resolve(addSuffix(basename(resourcePath), "_orient")).toFile();
+        File output = outputDir.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
         assertDoesNotThrow(() -> ExifRemoval.process(input, output));
 
         Metadata metadata = assertDoesNotThrow(
@@ -155,7 +155,7 @@ class ExifToolComparisonTest {
         assumeFalse(isTiff(resourcePath), "TIFF re-encodes differently");
 
         File input = resourceFile(resourcePath);
-        File javaOutput = outputDir.resolve(addSuffix(basename(resourcePath), "_pixels")).toFile();
+        File javaOutput = outputDir.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
         ExifRemoval.process(input, javaOutput);
 
         String exiftoolPath = resourcePath.replace("input/", "expected-exiftool/");
@@ -190,7 +190,7 @@ class ExifToolComparisonTest {
         assumeFalse(hasIptc, "Only testing no-IPTC files");
 
         File input = resourceFile(resourcePath);
-        File output = outputDir.resolve(addSuffix(basename(resourcePath), "_noop")).toFile();
+        File output = outputDir.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
         ExifRemoval.process(input, output);
 
         assertArrayEquals(

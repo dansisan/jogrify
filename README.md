@@ -89,7 +89,7 @@ All test data lives in `src/test/resources/testdata/`:
 Both test suites write processed images to `build/test-output/` for visual inspection:
 
 - **`build/test-output/`** — `ExifRemovalTest` output. Contains `_processed`, `_original`, and `_expected` copies side by side for its hardcoded test cases (gps.*, rotate.*, Landscape_*).
-- **`build/test-output/exiftool-comparison/`** — `ExifToolComparisonTest` output. Contains `_original` copies alongside processed output for every image in the CSV, with suffixes indicating which test produced them (`_processed`, `_orient`, `_pixels`, `_noop`).
+- **`build/test-output/exiftool-comparison/`** — `ExifToolComparisonTest` output. Contains `_original` and `_processed` pairs for every image in the CSV.
 
 ## Dependencies
 
