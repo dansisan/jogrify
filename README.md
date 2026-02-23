@@ -49,7 +49,7 @@ Requires Java 11+.
 ./gradlew test
 ```
 
-36 test images exercise a wide range of metadata structures, including images from the [ExifTool test suite](https://github.com/exiftool/exiftool):
+37 test images exercise a wide range of metadata structures, including images from the [ExifTool test suite](https://github.com/exiftool/exiftool):
 
 - Standard EXIF with GPS (JPEG, PNG, TIFF, WebP)
 - All 9 EXIF orientation values (0-8)
@@ -60,6 +60,7 @@ Requires Java 11+.
 - AFCP and FotoStation trailers (post-EOI metadata)
 - Ducky (Photoshop save-for-web)
 - Conflicting EXIF/IPTC/XMP values (MWG priority)
+- PNG with EXIF in tEXt chunks (hex-encoded raw profile, as Chrome produces)
 - Minimal JPEG with no metadata at all (no-op edge case)
 
 Two test suites validate behavior:
