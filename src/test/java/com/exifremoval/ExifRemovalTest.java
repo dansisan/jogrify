@@ -38,7 +38,7 @@ class ExifRemovalTest {
 
     @ParameterizedTest(name = "metadata: {0}")
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
-    void testMetadataReading(String resourcePath, boolean expectedHasExif, boolean expectedHasGps, int expectedOrientation) {
+    void testMetadataReading(String resourcePath, boolean expectedHasExif, boolean expectedHasGps, int exiftoolOrientation) {
         File input = resourceFile(resourcePath);
         ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(input);
 
@@ -46,6 +46,10 @@ class ExifRemovalTest {
                 "EXIF detection mismatch for " + resourcePath);
         assertEquals(expectedHasGps, info.hasGps,
                 "GPS detection mismatch for " + resourcePath);
+
+        // orientation=-1 in CSV means exiftool reports no orientation tag;
+        // the code should default to 1 (normal) per EXIF spec.
+        int expectedOrientation = exiftoolOrientation == -1 ? 1 : exiftoolOrientation;
         assertEquals(expectedOrientation, info.orientation,
                 "Orientation mismatch for " + resourcePath);
     }
