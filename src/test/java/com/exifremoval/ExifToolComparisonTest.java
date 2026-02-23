@@ -65,9 +65,9 @@ class ExifToolComparisonTest {
 
         File input = resourceFile(resourcePath);
         String base = basename(resourcePath);
-        Files.copy(input.toPath(), outputDir.resolve("original_" + base),
+        Files.copy(input.toPath(), outputDir.resolve(addSuffix(base, "_original")),
                 StandardCopyOption.REPLACE_EXISTING);
-        File output = outputDir.resolve(base).toFile();
+        File output = outputDir.resolve(addSuffix(base, "_processed")).toFile();
         assertDoesNotThrow(() -> ExifRemoval.process(input, output),
                 "Processing failed for " + resourcePath);
 
@@ -129,7 +129,7 @@ class ExifToolComparisonTest {
         assumeFalse(isTiff(resourcePath), "TIFF applies orientation as pixel transform");
 
         File input = resourceFile(resourcePath);
-        File output = outputDir.resolve("orient_" + basename(resourcePath)).toFile();
+        File output = outputDir.resolve(addSuffix(basename(resourcePath), "_orient")).toFile();
         assertDoesNotThrow(() -> ExifRemoval.process(input, output));
 
         Metadata metadata = assertDoesNotThrow(
@@ -155,7 +155,7 @@ class ExifToolComparisonTest {
         assumeFalse(isTiff(resourcePath), "TIFF re-encodes differently");
 
         File input = resourceFile(resourcePath);
-        File javaOutput = outputDir.resolve("pixels_" + basename(resourcePath)).toFile();
+        File javaOutput = outputDir.resolve(addSuffix(basename(resourcePath), "_pixels")).toFile();
         ExifRemoval.process(input, javaOutput);
 
         String exiftoolPath = resourcePath.replace("input/", "expected-exiftool/");
@@ -190,7 +190,7 @@ class ExifToolComparisonTest {
         assumeFalse(hasIptc, "Only testing no-IPTC files");
 
         File input = resourceFile(resourcePath);
-        File output = outputDir.resolve("noop_" + basename(resourcePath)).toFile();
+        File output = outputDir.resolve(addSuffix(basename(resourcePath), "_noop")).toFile();
         ExifRemoval.process(input, output);
 
         assertArrayEquals(
@@ -238,6 +238,11 @@ class ExifToolComparisonTest {
     private static String basename(String resourcePath) {
         int slash = resourcePath.lastIndexOf('/');
         return slash >= 0 ? resourcePath.substring(slash + 1) : resourcePath;
+    }
+
+    private static String addSuffix(String filename, String suffix) {
+        int dot = filename.lastIndexOf('.');
+        return filename.substring(0, dot) + suffix + filename.substring(dot);
     }
 
     private File resourceFile(String path) {
