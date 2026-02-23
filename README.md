@@ -51,7 +51,7 @@ Requires Java 11+.
 ./gradlew test
 ```
 
-37 test images exercise a wide range of metadata structures, including images from the [ExifTool test suite](https://github.com/exiftool/exiftool):
+37 test images exercise a wide range of metadata structures. 17 were selected from [exiftool's test images](https://github.com/exiftool/exiftool/tree/master/t/images) to cover metadata types not present in the original test set (IPTC, XMP, extended XMP, ICC profiles, maker notes from various manufacturers, post-EOI trailers). The full set of ~190 images wasn't included — many are duplicates, RAW formats we don't support, or don't add new metadata scenarios. Test cases include:
 
 - Standard EXIF with GPS (JPEG, PNG, TIFF, WebP)
 - All 9 EXIF orientation values (0-8)
