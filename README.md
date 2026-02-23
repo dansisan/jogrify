@@ -1,6 +1,6 @@
 # exif-removal
 
-A command-line tool that strips metadata from images and applies orientation corrections, similar to ImageMagick's `mogrify -auto-orient -strip`.
+A command-line tool that losslessly strips metadata from images while preserving the EXIF orientation tag. For JPEG, PNG, and WebP, image data is never re-encoded — only metadata segments are removed. This avoids quality loss from lossy re-compression and pixel differences from codec mismatches.
 
 ## Supported formats
 
