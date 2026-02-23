@@ -44,8 +44,6 @@ class ExifRemovalTest {
 
         assertEquals(expectedHasExif, info.hasExif,
                 "EXIF detection mismatch for " + resourcePath);
-        assertEquals(expectedHasGps, info.hasGps,
-                "GPS detection mismatch for " + resourcePath);
 
         // orientation=-1 in CSV means exiftool reports no orientation tag;
         // the code should default to 1 (normal) per EXIF spec.

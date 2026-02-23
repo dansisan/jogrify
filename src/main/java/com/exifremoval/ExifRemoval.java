@@ -86,13 +86,11 @@ public class ExifRemoval {
     static class ImageInfo {
         final int orientation;
         final boolean hasExif;
-        final boolean hasGps;
         final boolean hasIptc;
 
-        ImageInfo(int orientation, boolean hasExif, boolean hasGps, boolean hasIptc) {
+        ImageInfo(int orientation, boolean hasExif, boolean hasIptc) {
             this.orientation = orientation;
             this.hasExif = hasExif;
-            this.hasGps = hasGps;
             this.hasIptc = hasIptc;
         }
 
@@ -130,10 +128,10 @@ public class ExifRemoval {
                 }
             }
 
-            return new ImageInfo(orientation, hasExif, hasGps, hasIptc);
+            return new ImageInfo(orientation, hasExif, hasIptc);
         } catch (Exception e) {
             // No EXIF or unreadable — treat as normal, no metadata
-            return new ImageInfo(1, false, false, false);
+            return new ImageInfo(1, false, false);
         }
     }
 
@@ -172,9 +170,7 @@ public class ExifRemoval {
                 orientation = exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
             }
 
-            boolean hasGps = exifMetadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
-
-            return new ImageInfo(orientation, true, hasGps, false);
+            return new ImageInfo(orientation, true, false);
         } catch (Exception e) {
             return null;
         }
