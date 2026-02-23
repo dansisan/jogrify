@@ -7,6 +7,8 @@ import com.drew.metadata.Tag;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.ExifReader;
 import com.drew.metadata.exif.GpsDirectory;
+import com.drew.metadata.iptc.IptcDirectory;
+import com.drew.metadata.photoshop.PhotoshopDirectory;
 import com.drew.metadata.png.PngDirectory;
 
 import javax.imageio.IIOImage;
@@ -85,15 +87,17 @@ public class ExifRemoval {
         final int orientation;
         final boolean hasExif;
         final boolean hasGps;
+        final boolean hasIptc;
 
-        ImageInfo(int orientation, boolean hasExif, boolean hasGps) {
+        ImageInfo(int orientation, boolean hasExif, boolean hasGps, boolean hasIptc) {
             this.orientation = orientation;
             this.hasExif = hasExif;
             this.hasGps = hasGps;
+            this.hasIptc = hasIptc;
         }
 
         boolean needsProcessing() {
-            return hasExif;
+            return hasExif || hasIptc;
         }
     }
 
@@ -102,6 +106,8 @@ public class ExifRemoval {
             Metadata metadata = ImageMetadataReader.readMetadata(file);
 
             boolean hasGps = metadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
+            boolean hasIptc = metadata.getFirstDirectoryOfType(IptcDirectory.class) != null
+                    || metadata.getFirstDirectoryOfType(PhotoshopDirectory.class) != null;
 
             int orientation = 1;
 
@@ -124,10 +130,10 @@ public class ExifRemoval {
                 }
             }
 
-            return new ImageInfo(orientation, hasExif, hasGps);
+            return new ImageInfo(orientation, hasExif, hasGps, hasIptc);
         } catch (Exception e) {
             // No EXIF or unreadable — treat as normal, no metadata
-            return new ImageInfo(1, false, false);
+            return new ImageInfo(1, false, false, false);
         }
     }
 
@@ -168,7 +174,7 @@ public class ExifRemoval {
 
             boolean hasGps = exifMetadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
 
-            return new ImageInfo(orientation, true, hasGps);
+            return new ImageInfo(orientation, true, hasGps, false);
         } catch (Exception e) {
             return null;
         }
@@ -312,9 +318,9 @@ public class ExifRemoval {
 
     /**
      * Losslessly strip metadata from a JPEG file.
-     * Parses JPEG segments, removes APP1 (EXIF/XMP) and APP2 (ICC),
-     * inserts a minimal EXIF APP1 with just the orientation tag,
-     * and copies all image data verbatim.
+     * Parses JPEG segments, removes all metadata APP segments (APP1-APP13, APP15)
+     * and COM comments, inserts a minimal EXIF APP1 with just the orientation tag,
+     * and copies all image data verbatim. Keeps APP0 (JFIF) and APP14 (Adobe color).
      */
     static void stripJpegMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
@@ -358,8 +364,21 @@ public class ExifRemoval {
             int len = ((data[pos + 2] & 0xFF) << 8) | (data[pos + 3] & 0xFF);
             int segmentSize = 2 + len; // 2 for marker bytes + length (which includes its own 2 bytes)
 
-            // Skip APP1 (0xE1) and APP2 (0xE2) — these contain EXIF, XMP, ICC
-            if (marker == 0xE1 || marker == 0xE2) {
+            // Strip all metadata APP segments:
+            //   APP1  (0xE1) = EXIF, XMP
+            //   APP2  (0xE2) = ICC profile, FlashPix
+            //   APP3-APP11   = various rare metadata
+            //   APP12 (0xEC) = Ducky (Photoshop save-for-web)
+            //   APP13 (0xED) = Photoshop/IPTC
+            //   APP15 (0xEF) = rare metadata
+            // Keep APP0 (0xE0 = JFIF) and APP14 (0xEE = Adobe color info for decoding).
+            if (marker >= 0xE1 && marker <= 0xEF && marker != 0xEE) {
+                pos += segmentSize;
+                continue;
+            }
+
+            // Strip COM (0xFE) comments — may contain PII
+            if (marker == 0xFE) {
                 pos += segmentSize;
                 continue;
             }

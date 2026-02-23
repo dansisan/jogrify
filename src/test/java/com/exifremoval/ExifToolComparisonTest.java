@@ -60,7 +60,7 @@ class ExifToolComparisonTest {
             String resourcePath, boolean hasExif, boolean hasGps, int orientation,
             boolean hasIptc, boolean hasXmp, boolean hasIcc, boolean hasMakerNotes) {
 
-        assumeTrue(hasExif, "Skipping file without EXIF");
+        assumeTrue(hasExif || hasIptc, "Skipping file without EXIF or IPTC");
 
         File input = resourceFile(resourcePath);
         File output = outputDir.resolve(basename(resourcePath)).toFile();
@@ -81,7 +81,10 @@ class ExifToolComparisonTest {
         checkAbsent(metadata, GpsDirectory.class, "GPS", violations);
         checkAbsent(metadata, IptcDirectory.class, "IPTC", violations);
         checkAbsent(metadata, XmpDirectory.class, "XMP", violations);
-        checkAbsent(metadata, IccDirectory.class, "ICC Profile", violations);
+        // ICC is allowed in TIFF output (Java ImageIO injects sRGB during re-encoding)
+        if (!isTiff(resourcePath)) {
+            checkAbsent(metadata, IccDirectory.class, "ICC Profile", violations);
+        }
         checkAbsent(metadata, PhotoshopDirectory.class, "Photoshop", violations);
         checkAbsent(metadata, DuckyDirectory.class, "Ducky", violations);
         checkAbsent(metadata, PrintIMDirectory.class, "PrintIM", violations);
@@ -141,9 +144,10 @@ class ExifToolComparisonTest {
     @ParameterizedTest(name = "pixel fidelity: {0}")
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
     void testPixelFidelityMatchesExiftool(
-            String resourcePath, boolean hasExif, boolean hasGps, int orientation) throws Exception {
+            String resourcePath, boolean hasExif, boolean hasGps, int orientation,
+            boolean hasIptc) throws Exception {
 
-        assumeTrue(hasExif, "Skipping file without EXIF");
+        assumeTrue(hasExif || hasIptc, "Skipping file without EXIF or IPTC");
         assumeFalse(isTiff(resourcePath), "TIFF re-encodes differently");
 
         File input = resourceFile(resourcePath);
@@ -175,9 +179,11 @@ class ExifToolComparisonTest {
     @ParameterizedTest(name = "no-op copy: {0}")
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
     void testNoExifFilesCopiedUnchanged(
-            String resourcePath, boolean hasExif) throws Exception {
+            String resourcePath, boolean hasExif, boolean hasGps, int orientation,
+            boolean hasIptc) throws Exception {
 
         assumeFalse(hasExif, "Only testing no-EXIF files");
+        assumeFalse(hasIptc, "Only testing no-IPTC files");
 
         File input = resourceFile(resourcePath);
         File output = outputDir.resolve("noop_" + basename(resourcePath)).toFile();
