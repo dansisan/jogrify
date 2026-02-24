@@ -25,15 +25,21 @@ for f in input/*; do
         | head -1 \
         | awk -F',' '{gsub(/^ +| +$/, "", $4); print $4}')
 
-    # Read hasExif from CSV
+    # Read hasExif, hasIptc, hasXmp from CSV
     hasExif=$(grep "input/$base," metadata-ground-truth.csv \
         | head -1 \
         | awk -F',' '{gsub(/^ +| +$/, "", $2); print $2}')
+    hasIptc=$(grep "input/$base," metadata-ground-truth.csv \
+        | head -1 \
+        | awk -F',' '{gsub(/^ +| +$/, "", $5); print $5}')
+    hasXmp=$(grep "input/$base," metadata-ground-truth.csv \
+        | head -1 \
+        | awk -F',' '{gsub(/^ +| +$/, "", $6); print $6}')
 
-    if [ "$hasExif" != "true" ]; then
-        # No EXIF — file would not be processed; copy unchanged
+    if [ "$hasExif" != "true" ] && [ "$hasIptc" != "true" ] && [ "$hasXmp" != "true" ]; then
+        # No metadata — file would not be processed; copy unchanged
         cp "$f" "$OUTDIR/$base"
-        echo "  copy (no EXIF): $base"
+        echo "  copy (no meta):  $base"
     elif [ "$orientation" = "-1" ] || [ -z "$orientation" ]; then
         # Has EXIF but no orientation tag: strip everything
         exiftool -all= "$f" -o "$OUTDIR/$base" 2>/dev/null

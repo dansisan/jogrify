@@ -61,7 +61,7 @@ class ExifToolComparisonTest {
             String resourcePath, boolean hasExif, boolean hasGps, int orientation,
             boolean hasIptc, boolean hasXmp, boolean hasIcc, boolean hasMakerNotes) throws Exception {
 
-        assumeTrue(hasExif || hasIptc, "Skipping file without EXIF or IPTC");
+        assumeTrue(hasExif || hasIptc || hasXmp, "Skipping file without EXIF, IPTC, or XMP");
 
         File input = resourceFile(resourcePath);
         String base = basename(resourcePath);
@@ -149,9 +149,9 @@ class ExifToolComparisonTest {
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
     void testPixelFidelityMatchesExiftool(
             String resourcePath, boolean hasExif, boolean hasGps, int orientation,
-            boolean hasIptc) throws Exception {
+            boolean hasIptc, boolean hasXmp) throws Exception {
 
-        assumeTrue(hasExif || hasIptc, "Skipping file without EXIF or IPTC");
+        assumeTrue(hasExif || hasIptc || hasXmp, "Skipping file without EXIF, IPTC, or XMP");
         assumeFalse(isTiff(resourcePath), "TIFF re-encodes differently");
         assumeFalse(isWebp(resourcePath), "WebP pixel comparison requires webp-imageio");
 
@@ -185,10 +185,11 @@ class ExifToolComparisonTest {
     @CsvFileSource(resources = "/testdata/metadata-ground-truth.csv", numLinesToSkip = 1)
     void testNoExifFilesCopiedUnchanged(
             String resourcePath, boolean hasExif, boolean hasGps, int orientation,
-            boolean hasIptc) throws Exception {
+            boolean hasIptc, boolean hasXmp) throws Exception {
 
         assumeFalse(hasExif, "Only testing no-EXIF files");
         assumeFalse(hasIptc, "Only testing no-IPTC files");
+        assumeFalse(hasXmp, "Only testing no-XMP files");
 
         File input = resourceFile(resourcePath);
         File output = outputDir.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();

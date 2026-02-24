@@ -1,6 +1,6 @@
 # exif-removal
 
-A command-line tool that losslessly strips metadata from images while preserving the EXIF orientation tag. For JPEG, PNG, and WebP, image data is never re-encoded — only metadata segments are removed. This avoids quality loss from lossy re-compression and pixel differences from codec mismatches.
+A command-line tool that losslessly strips metadata from images while preserving the EXIF orientation tag. For JPEG, PNG, WebP, and GIF, image data is never re-encoded — only metadata segments are removed. This avoids quality loss from lossy re-compression and pixel differences from codec mismatches.
 
 ## Supported formats
 
@@ -16,7 +16,7 @@ JPEG, PNG, GIF, TIFF, WebP
 
 **TIFF:** Re-encoded via Java ImageIO with metadata omitted. TIFF interleaves metadata with image data in its IFD structure, so lossless segment stripping isn't possible — the image is decoded, the orientation transform is applied as a pixel rotation, and then re-encoded clean.
 
-**GIF:** GIF has no EXIF support, so GIF files are always copied unchanged.
+**GIF:** Application Extension blocks (XMP, ICC profiles) and Comment Extensions. GIF has no EXIF support, but XMP can contain GPS and other sensitive data. Image data is copied verbatim.
 
 **Orientation handling:** For JPEG, PNG, and WebP, the orientation tag is preserved in a minimal EXIF segment so that downstream tools can apply it. For TIFF (which is re-encoded), the orientation is applied as a pixel transform during re-encoding.
 
@@ -63,13 +63,14 @@ Requires Java 11+.
 - Ducky (Photoshop save-for-web)
 - Conflicting EXIF/IPTC/XMP values (MWG priority)
 - PNG with EXIF in tEXt chunks (hex-encoded raw profile, as Chrome produces)
+- GIF with XMP and ICC profile (Application Extension blocks)
 - Minimal JPEG with no metadata at all (no-op edge case)
 
 Two test suites validate behavior:
 
-**ExifRemovalTest** (55 cases) verifies metadata reading, GPS stripping, orientation preservation, rotation, and no-op copying against ImageMagick reference images.
+**ExifRemovalTest** (56 cases) verifies metadata reading, GPS stripping, orientation preservation, rotation, and no-op copying against ImageMagick reference images.
 
-**ExifToolComparisonTest** (144 cases) compares output against pre-generated exiftool reference outputs:
+**ExifToolComparisonTest** (148 cases) compares output against pre-generated exiftool reference outputs:
 - **Metadata cleanliness** — asserts no GPS, IPTC, XMP, ICC, Photoshop, Ducky, PrintIM, maker notes, or non-structural IFD0 tags remain
 - **Orientation preserved** — verifies non-trivial orientation tags survive stripping
 - **Pixel fidelity** — asserts RMSE=0 between Java output and exiftool reference (lossless formats)

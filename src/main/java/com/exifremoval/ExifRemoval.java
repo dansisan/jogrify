@@ -10,6 +10,7 @@ import com.drew.metadata.exif.GpsDirectory;
 import com.drew.metadata.iptc.IptcDirectory;
 import com.drew.metadata.photoshop.PhotoshopDirectory;
 import com.drew.metadata.png.PngDirectory;
+import com.drew.metadata.xmp.XmpDirectory;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -71,6 +72,9 @@ public class ExifRemoval {
             case "webp":
                 stripWebpMetadata(inputFile, outputFile, info.orientation);
                 return;
+            case "gif":
+                stripGifMetadata(inputFile, outputFile);
+                return;
         }
 
         BufferedImage image = ImageIO.read(inputFile);
@@ -87,15 +91,17 @@ public class ExifRemoval {
         final int orientation;
         final boolean hasExif;
         final boolean hasIptc;
+        final boolean hasXmp;
 
-        ImageInfo(int orientation, boolean hasExif, boolean hasIptc) {
+        ImageInfo(int orientation, boolean hasExif, boolean hasIptc, boolean hasXmp) {
             this.orientation = orientation;
             this.hasExif = hasExif;
             this.hasIptc = hasIptc;
+            this.hasXmp = hasXmp;
         }
 
         boolean needsProcessing() {
-            return hasExif || hasIptc;
+            return hasExif || hasIptc || hasXmp;
         }
     }
 
@@ -106,6 +112,7 @@ public class ExifRemoval {
             boolean hasGps = metadata.getFirstDirectoryOfType(GpsDirectory.class) != null;
             boolean hasIptc = metadata.getFirstDirectoryOfType(IptcDirectory.class) != null
                     || metadata.getFirstDirectoryOfType(PhotoshopDirectory.class) != null;
+            boolean hasXmp = metadata.getFirstDirectoryOfType(XmpDirectory.class) != null;
 
             int orientation = 1;
 
@@ -128,10 +135,10 @@ public class ExifRemoval {
                 }
             }
 
-            return new ImageInfo(orientation, hasExif, hasIptc);
+            return new ImageInfo(orientation, hasExif, hasIptc, hasXmp);
         } catch (Exception e) {
             // No EXIF or unreadable — treat as normal, no metadata
-            return new ImageInfo(1, false, false);
+            return new ImageInfo(1, false, false, false);
         }
     }
 
@@ -170,7 +177,7 @@ public class ExifRemoval {
                 orientation = exifDir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
             }
 
-            return new ImageInfo(orientation, true, false);
+            return new ImageInfo(orientation, true, false, false);
         } catch (Exception e) {
             return null;
         }
@@ -593,6 +600,122 @@ public class ExifRemoval {
         out.write(tiffData);
         // Pad to even size
         if (size % 2 != 0) out.write(0);
+    }
+
+    /**
+     * Losslessly strip metadata from a GIF file.
+     * GIF stores metadata in Extension blocks after the Logical Screen Descriptor.
+     * We strip Application Extensions (21 FF — XMP, ICC profiles) and
+     * Comment Extensions (21 FE — may contain PII). Image data and Graphics
+     * Control Extensions are copied verbatim.
+     */
+    static void stripGifMetadata(File input, File output) throws Exception {
+        byte[] data = Files.readAllBytes(input.toPath());
+
+        // GIF header: "GIF87a" or "GIF89a" (6 bytes)
+        if (data.length < 6 || data[0] != 'G' || data[1] != 'I' || data[2] != 'F') {
+            throw new IllegalArgumentException("Not a valid GIF file: " + input);
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+
+        // Copy Header (6 bytes) + Logical Screen Descriptor (7 bytes)
+        out.write(data, 0, 13);
+
+        // Copy Global Color Table if present
+        int packed = data[10] & 0xFF;
+        boolean hasGct = (packed & 0x80) != 0;
+        int pos = 13;
+        if (hasGct) {
+            int gctSize = 3 * (1 << ((packed & 0x07) + 1));
+            out.write(data, pos, gctSize);
+            pos += gctSize;
+        }
+
+        // Process blocks
+        while (pos < data.length) {
+            int blockType = data[pos] & 0xFF;
+
+            if (blockType == 0x3B) { // Trailer
+                out.write(0x3B);
+                break;
+            }
+
+            if (blockType == 0x2C) { // Image Descriptor
+                // Copy Image Descriptor (10 bytes min)
+                out.write(data, pos, 10);
+                int imgPacked = data[pos + 9] & 0xFF;
+                pos += 10;
+
+                // Copy Local Color Table if present
+                if ((imgPacked & 0x80) != 0) {
+                    int lctSize = 3 * (1 << ((imgPacked & 0x07) + 1));
+                    out.write(data, pos, lctSize);
+                    pos += lctSize;
+                }
+
+                // Copy LZW Minimum Code Size
+                out.write(data[pos] & 0xFF);
+                pos++;
+
+                // Copy sub-blocks (data blocks)
+                pos = copySubBlocks(data, pos, out);
+                continue;
+            }
+
+            if (blockType == 0x21) { // Extension
+                int label = data[pos + 1] & 0xFF;
+
+                if (label == 0xFF || label == 0xFE) {
+                    // Application Extension (0xFF) or Comment Extension (0xFE) — skip
+                    pos += 2;
+                    // Skip block size + data for Application Extension header
+                    if (label == 0xFF) {
+                        int blockSize = data[pos] & 0xFF;
+                        pos += 1 + blockSize; // skip block size byte + app identifier
+                    }
+                    // Skip sub-blocks
+                    pos = skipSubBlocks(data, pos);
+                    continue;
+                }
+
+                // Other extensions (e.g. Graphics Control 0xF9) — copy
+                out.write(data, pos, 2); // introducer + label
+                pos += 2;
+                pos = copySubBlocks(data, pos, out);
+                continue;
+            }
+
+            // Unknown block type — copy byte and move on
+            out.write(data[pos] & 0xFF);
+            pos++;
+        }
+
+        Files.write(output.toPath(), out.toByteArray());
+    }
+
+    /** Copy GIF sub-blocks (size + data pairs) until a zero-length terminator. */
+    private static int copySubBlocks(byte[] data, int pos, ByteArrayOutputStream out) {
+        while (pos < data.length) {
+            int size = data[pos] & 0xFF;
+            out.write(size);
+            pos++;
+            if (size == 0) break;
+            out.write(data, pos, size);
+            pos += size;
+        }
+        return pos;
+    }
+
+    /** Skip GIF sub-blocks until a zero-length terminator. */
+    private static int skipSubBlocks(byte[] data, int pos) {
+        while (pos < data.length) {
+            int size = data[pos] & 0xFF;
+            pos++;
+            if (size == 0) break;
+            pos += size;
+        }
+        return pos;
     }
 
     /**
