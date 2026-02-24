@@ -672,7 +672,7 @@ public class ExifRemoval {
                 pos++;
 
                 // Copy sub-blocks (data blocks)
-                pos = copySubBlocks(data, pos, out);
+                pos = copyGifSubBlocks(data, pos, out);
                 continue;
             }
 
@@ -687,15 +687,22 @@ public class ExifRemoval {
                         int blockSize = data[pos] & 0xFF;
                         pos += 1 + blockSize; // skip block size byte + app identifier
                     }
-                    // Skip sub-blocks
-                    pos = skipSubBlocks(data, pos);
+                    // Skip sub-blocks (size + data pairs until zero terminator)
+                    while (pos < data.length) {
+                        int size = data[pos] & 0xFF;
+                        pos++;
+                        if (size == 0) {
+                            break;
+                        }
+                        pos += size;
+                    }
                     continue;
                 }
 
                 // Other extensions (e.g. Graphics Control 0xF9) — copy
                 out.write(data, pos, 2); // introducer + label
                 pos += 2;
-                pos = copySubBlocks(data, pos, out);
+                pos = copyGifSubBlocks(data, pos, out);
                 continue;
             }
 
@@ -708,7 +715,7 @@ public class ExifRemoval {
     }
 
     /** Copy GIF sub-blocks (size + data pairs) until a zero-length terminator. */
-    private static int copySubBlocks(byte[] data, int pos, ByteArrayOutputStream out) {
+    private static int copyGifSubBlocks(byte[] data, int pos, ByteArrayOutputStream out) {
         while (pos < data.length) {
             int size = data[pos] & 0xFF;
             out.write(size);
@@ -717,19 +724,6 @@ public class ExifRemoval {
                 break;
             }
             out.write(data, pos, size);
-            pos += size;
-        }
-        return pos;
-    }
-
-    /** Skip GIF sub-blocks until a zero-length terminator. */
-    private static int skipSubBlocks(byte[] data, int pos) {
-        while (pos < data.length) {
-            int size = data[pos] & 0xFF;
-            pos++;
-            if (size == 0) {
-                break;
-            }
             pos += size;
         }
         return pos;
