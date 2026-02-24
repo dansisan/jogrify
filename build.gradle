@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    id 'checkstyle'
 }
 
 java {
@@ -20,6 +21,11 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+checkstyle {
+    configFile = file('etc/checkstyle/checkstyle.xml')
+    toolVersion = '9.3'
 }
 
 application {

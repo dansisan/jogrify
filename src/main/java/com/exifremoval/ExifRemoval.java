@@ -1,8 +1,27 @@
 package com.exifremoval;
 
+import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.Iterator;
+import java.util.logging.Logger;
+import java.util.zip.CRC32;
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+
 import com.drew.imaging.ImageMetadataReader;
-import com.drew.metadata.Metadata;
+import com.drew.lang.ByteArrayReader;
 import com.drew.metadata.Directory;
+import com.drew.metadata.Metadata;
 import com.drew.metadata.Tag;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.ExifReader;
@@ -11,22 +30,6 @@ import com.drew.metadata.iptc.IptcDirectory;
 import com.drew.metadata.photoshop.PhotoshopDirectory;
 import com.drew.metadata.png.PngDirectory;
 import com.drew.metadata.xmp.XmpDirectory;
-
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-import java.util.Iterator;
-import java.util.logging.Logger;
 
 public class ExifRemoval {
 
@@ -75,6 +78,8 @@ public class ExifRemoval {
             case "gif":
                 stripGifMetadata(inputFile, outputFile);
                 return;
+            default:
+                break;
         }
 
         BufferedImage image = ImageIO.read(inputFile);
@@ -88,6 +93,7 @@ public class ExifRemoval {
     }
 
     static class ImageInfo {
+
         final int orientation;
         final boolean hasExif;
         final boolean hasIptc;
@@ -129,7 +135,9 @@ public class ExifRemoval {
                         String desc = tag.getDescription();
                         if (desc != null && desc.contains("Raw profile type exif")) {
                             ImageInfo pngInfo = parseImageInfoFromRawExifProfile(desc);
-                            if (pngInfo != null) return pngInfo;
+                            if (pngInfo != null) {
+                                return pngInfo;
+                            }
                         }
                     }
                 }
@@ -164,12 +172,17 @@ public class ExifRemoval {
             }
 
             String hex = hexBuilder.toString();
-            if (hex.isEmpty()) return null;
+            if (hex.isEmpty()) {
+                return null;
+            }
 
             byte[] exifBytes = hexToBytes(hex);
 
             Metadata exifMetadata = new Metadata();
-            new ExifReader().extract(new com.drew.lang.ByteArrayReader(exifBytes), exifMetadata, ExifReader.JPEG_SEGMENT_PREAMBLE.length());
+            new ExifReader().extract(
+                    new ByteArrayReader(exifBytes),
+                    exifMetadata,
+                    ExifReader.JPEG_SEGMENT_PREAMBLE.length());
 
             int orientation = 1;
             ExifIFD0Directory exifDir = exifMetadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
@@ -179,6 +192,7 @@ public class ExifRemoval {
 
             return new ImageInfo(orientation, true, false, false);
         } catch (Exception e) {
+            // Malformed EXIF profile — ignore
             return null;
         }
     }
@@ -189,7 +203,9 @@ public class ExifRemoval {
         for (int i = 0; i + 1 < len; i += 2) {
             int hi = Character.digit(hex.charAt(i), 16);
             int lo = Character.digit(hex.charAt(i + 1), 16);
-            if (hi < 0 || lo < 0) continue;
+            if (hi < 0 || lo < 0) {
+                continue;
+            }
             out.write((hi << 4) | lo);
         }
         return out.toByteArray();
@@ -198,7 +214,7 @@ public class ExifRemoval {
     /**
      * Apply EXIF orientation transform, matching ImageMagick's -auto-orient behavior.
      *
-     * Orientation values:
+     * <p>Orientation values:
      *   1 = normal
      *   2 = flipped horizontally
      *   3 = rotated 180
@@ -254,12 +270,15 @@ public class ExifRemoval {
                 t.rotate(-Math.PI / 2);
                 swapDimensions = true;
                 break;
+            default:
+                break;
         }
 
         int destW = swapDimensions ? h : w;
         int destH = swapDimensions ? w : h;
 
-        BufferedImage dest = new BufferedImage(destW, destH, src.getType() != 0 ? src.getType() : BufferedImage.TYPE_INT_RGB);
+        BufferedImage dest = new BufferedImage(
+                destW, destH, src.getType() != 0 ? src.getType() : BufferedImage.TYPE_INT_RGB);
         Graphics2D g = dest.createGraphics();
         g.drawImage(src, t, null);
         g.dispose();
@@ -268,11 +287,21 @@ public class ExifRemoval {
 
     static String getFormatName(String filename) {
         String lower = filename.toLowerCase();
-        if (lower.endsWith(".png")) return "png";
-        if (lower.endsWith(".gif")) return "gif";
-        if (lower.endsWith(".bmp")) return "bmp";
-        if (lower.endsWith(".tiff") || lower.endsWith(".tif")) return "tiff";
-        if (lower.endsWith(".webp")) return "webp";
+        if (lower.endsWith(".png")) {
+            return "png";
+        }
+        if (lower.endsWith(".gif")) {
+            return "gif";
+        }
+        if (lower.endsWith(".bmp")) {
+            return "bmp";
+        }
+        if (lower.endsWith(".tiff") || lower.endsWith(".tif")) {
+            return "tiff";
+        }
+        if (lower.endsWith(".webp")) {
+            return "webp";
+        }
         return "jpeg";
     }
 
@@ -304,7 +333,9 @@ public class ExifRemoval {
 
         // Ensure we have a type compatible with JPEG (no alpha channel)
         BufferedImage toWrite = image;
-        if ("jpeg".equals(format) && (image.getType() == BufferedImage.TYPE_INT_ARGB || image.getType() == BufferedImage.TYPE_4BYTE_ABGR)) {
+        if ("jpeg".equals(format)
+                && (image.getType() == BufferedImage.TYPE_INT_ARGB
+                || image.getType() == BufferedImage.TYPE_4BYTE_ABGR)) {
             toWrite = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
             Graphics2D g = toWrite.createGraphics();
             g.drawImage(image, 0, 0, null);
@@ -417,7 +448,7 @@ public class ExifRemoval {
         int pos = 8;
         while (pos + 12 <= data.length) { // minimum chunk: 4 (len) + 4 (type) + 0 (data) + 4 (CRC)
             int chunkLen = readInt(data, pos);
-            String chunkType = new String(data, pos + 4, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            String chunkType = new String(data, pos + 4, 4, StandardCharsets.ISO_8859_1);
             int totalChunkSize = 12 + chunkLen; // 4 (len) + 4 (type) + data + 4 (CRC)
 
             if (isMetadataChunk(chunkType)) {
@@ -434,7 +465,9 @@ public class ExifRemoval {
             out.write(data, pos, totalChunkSize);
             pos += totalChunkSize;
 
-            if ("IEND".equals(chunkType)) break;
+            if ("IEND".equals(chunkType)) {
+                break;
+            }
         }
 
         Files.write(output.toPath(), out.toByteArray());
@@ -455,7 +488,7 @@ public class ExifRemoval {
         // Data
         out.write(tiffData);
         // CRC32 over type + data
-        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        CRC32 crc = new CRC32();
         crc.update(chunkType);
         crc.update(tiffData);
         writeInt(out, (int) crc.getValue());
@@ -475,37 +508,50 @@ public class ExifRemoval {
     static byte[] buildOrientationTiff(int orientation) {
         ByteArrayOutputStream tiff = new ByteArrayOutputStream();
 
-        // TIFF header (big-endian)
-        tiff.write('M'); tiff.write('M');       // byte order
-        tiff.write(0); tiff.write(0x2A);        // magic
-        tiff.write(0); tiff.write(0);
-        tiff.write(0); tiff.write(8);           // offset to IFD0
+        // TIFF header (big-endian): byte order, magic, offset to IFD0
+        tiff.write('M');
+        tiff.write('M');
+        tiff.write(0);
+        tiff.write(0x2A);
+        tiff.write(0);
+        tiff.write(0);
+        tiff.write(0);
+        tiff.write(8);
 
         // IFD0: 1 entry
-        tiff.write(0); tiff.write(1);
+        tiff.write(0);
+        tiff.write(1);
 
-        // Orientation tag (12 bytes)
-        tiff.write(0x01); tiff.write(0x12);     // tag = 0x0112
-        tiff.write(0); tiff.write(3);           // type = SHORT
-        tiff.write(0); tiff.write(0);
-        tiff.write(0); tiff.write(1);           // count = 1
-        tiff.write(0); tiff.write(orientation);
-        tiff.write(0); tiff.write(0);
+        // Orientation tag: 0x0112, type=SHORT, count=1
+        tiff.write(0x01);
+        tiff.write(0x12);
+        tiff.write(0);
+        tiff.write(3);
+        tiff.write(0);
+        tiff.write(0);
+        tiff.write(0);
+        tiff.write(1);
+        tiff.write(0);
+        tiff.write(orientation);
+        tiff.write(0);
+        tiff.write(0);
 
         // Next IFD offset = 0
-        tiff.write(0); tiff.write(0);
-        tiff.write(0); tiff.write(0);
+        tiff.write(0);
+        tiff.write(0);
+        tiff.write(0);
+        tiff.write(0);
 
         return tiff.toByteArray();
     }
 
     private static boolean isMetadataChunk(String chunkType) {
         switch (chunkType) {
-            case "eXIf":  // EXIF data
-            case "tEXt":  // text metadata (may contain raw EXIF profile)
-            case "iTXt":  // international text (may contain XMP)
-            case "zTXt":  // compressed text
-            case "iCCP":  // ICC color profile
+            case "eXIf": // EXIF data
+            case "tEXt": // text metadata (may contain raw EXIF profile)
+            case "iTXt": // international text (may contain XMP)
+            case "zTXt": // compressed text
+            case "iCCP": // ICC color profile
                 return true;
             default:
                 return false;
@@ -514,9 +560,9 @@ public class ExifRemoval {
 
     private static int readInt(byte[] data, int offset) {
         return ((data[offset] & 0xFF) << 24)
-             | ((data[offset + 1] & 0xFF) << 16)
-             | ((data[offset + 2] & 0xFF) << 8)
-             |  (data[offset + 3] & 0xFF);
+                | ((data[offset + 1] & 0xFF) << 16)
+                | ((data[offset + 2] & 0xFF) << 8)
+                | (data[offset + 3] & 0xFF);
     }
 
     /**
@@ -542,10 +588,10 @@ public class ExifRemoval {
         boolean wroteExif = false;
         int pos = 12;
         while (pos + 8 <= data.length) {
-            String fourCC = new String(data, pos, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            String fourCC = new String(data, pos, 4, StandardCharsets.ISO_8859_1);
             int chunkSize = readIntLE(data, pos + 4);
             int paddedSize = (chunkSize + 1) & ~1; // chunks are padded to even size
-            int totalChunkSize = 8 + paddedSize;    // 4 (FourCC) + 4 (size) + padded data
+            int totalChunkSize = 8 + paddedSize; // 4 (FourCC) + 4 (size) + padded data
 
             if ("EXIF".equals(fourCC) || "XMP ".equals(fourCC)) {
                 // Write orientation EXIF chunk once, replacing the first stripped chunk
@@ -575,10 +621,10 @@ public class ExifRemoval {
     }
 
     private static int readIntLE(byte[] data, int offset) {
-        return  (data[offset] & 0xFF)
-             | ((data[offset + 1] & 0xFF) << 8)
-             | ((data[offset + 2] & 0xFF) << 16)
-             | ((data[offset + 3] & 0xFF) << 24);
+        return (data[offset] & 0xFF)
+                | ((data[offset + 1] & 0xFF) << 8)
+                | ((data[offset + 2] & 0xFF) << 16)
+                | ((data[offset + 3] & 0xFF) << 24);
     }
 
     /**
@@ -589,7 +635,7 @@ public class ExifRemoval {
         byte[] tiffData = buildOrientationTiff(orientation);
 
         // FourCC
-        out.write(new byte[]{'E', 'X', 'I', 'F'});
+        out.write(new byte[] {'E', 'X', 'I', 'F'});
         // Size (little-endian)
         int size = tiffData.length;
         out.write(size & 0xFF);
@@ -599,7 +645,9 @@ public class ExifRemoval {
         // Data
         out.write(tiffData);
         // Pad to even size
-        if (size % 2 != 0) out.write(0);
+        if (size % 2 != 0) {
+            out.write(0);
+        }
     }
 
     /**
@@ -700,7 +748,9 @@ public class ExifRemoval {
             int size = data[pos] & 0xFF;
             out.write(size);
             pos++;
-            if (size == 0) break;
+            if (size == 0) {
+                break;
+            }
             out.write(data, pos, size);
             pos += size;
         }
@@ -712,7 +762,9 @@ public class ExifRemoval {
         while (pos < data.length) {
             int size = data[pos] & 0xFF;
             pos++;
-            if (size == 0) break;
+            if (size == 0) {
+                break;
+            }
             pos += size;
         }
         return pos;

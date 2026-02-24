@@ -1,18 +1,5 @@
 package com.exifremoval;
 
-import com.drew.imaging.ImageMetadataReader;
-import com.drew.metadata.Metadata;
-import com.drew.metadata.exif.ExifIFD0Directory;
-import com.drew.metadata.exif.GpsDirectory;
-
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvFileSource;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.MethodSource;
-
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.Files;
@@ -20,6 +7,18 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
+import javax.imageio.ImageIO;
+
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifIFD0Directory;
+import com.drew.metadata.exif.GpsDirectory;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,11 +26,11 @@ class ExifRemovalTest {
 
     private static final Logger LOG = Logger.getLogger(ExifRemovalTest.class.getName());
 
-    static final Path outputDir = Path.of("build/test-output");
+    static final Path OUTPUT_DIR = Path.of("build/test-output");
 
     @BeforeAll
     static void createOutputDir() throws Exception {
-        Files.createDirectories(outputDir);
+        Files.createDirectories(OUTPUT_DIR);
     }
 
     // ---- Ground truth: verify our metadata reader agrees with exiftool ----
@@ -62,7 +61,7 @@ class ExifRemovalTest {
             "gps.jpg,  jpg",
             "gps.png,  png",
             "gps.tiff, tiff",
-            "gps.webp, webp",
+            "gps.webp, webp"
     })
     void testGpsMetadataStripped(String filename, String ext) throws Exception {
         File input = resourceFile("testdata/input/" + filename);
@@ -103,7 +102,7 @@ class ExifRemovalTest {
 
     static Stream<Arguments> orientationCases() {
         Stream.Builder<Arguments> cases = Stream.builder();
-        for (String prefix : new String[]{"Landscape"}) {
+        for (String prefix : new String[] {"Landscape"}) {
             for (int i = 0; i <= 8; i++) {
                 cases.add(Arguments.of(prefix + "_" + i + ".jpg"));
             }
@@ -137,7 +136,7 @@ class ExifRemovalTest {
             "rotate.jpg,  jpg",
             "rotate.png,  png",
             "rotate.tiff, tiff",
-            "rotate.webp, webp",
+            "rotate.webp, webp"
     })
     void testRotationApplied(String filename, String ext) throws Exception {
         File input = resourceFile("testdata/input/" + filename);
@@ -191,18 +190,18 @@ class ExifRemovalTest {
     // ---- Helpers ----
 
     private File processImage(File input, String outputName) throws Exception {
-        File output = outputDir.resolve(addSuffix(outputName, "_processed")).toFile();
+        File output = OUTPUT_DIR.resolve(addSuffix(outputName, "_processed")).toFile();
         ExifRemoval.process(input, output);
         return output;
     }
 
     private void copyExpected(File expected, String outputName) throws Exception {
-        Path dest = outputDir.resolve(addSuffix(outputName, "_expected"));
+        Path dest = OUTPUT_DIR.resolve(addSuffix(outputName, "_expected"));
         Files.copy(expected.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private void copyOriginal(File input, String outputName) throws Exception {
-        Path dest = outputDir.resolve(addSuffix(outputName, "_original"));
+        Path dest = OUTPUT_DIR.resolve(addSuffix(outputName, "_original"));
         Files.copy(input.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
     }
 
@@ -234,8 +233,8 @@ class ExifRemovalTest {
                 int bB = rgbB & 0xFF;
 
                 sumSq += (rA - rB) * (rA - rB)
-                       + (gA - gB) * (gA - gB)
-                       + (bA - bB) * (bA - bB);
+                        + (gA - gB) * (gA - gB)
+                        + (bA - bB) * (bA - bB);
                 count += 3;
             }
         }
@@ -253,7 +252,8 @@ class ExifRemovalTest {
         }
     }
 
-    private static void assertOrientationPreserved(File file, int expectedOrientation, String filename) throws Exception {
+    private static void assertOrientationPreserved(File file, int expectedOrientation, String filename)
+            throws Exception {
         Metadata metadata = ImageMetadataReader.readMetadata(file);
         ExifIFD0Directory exifDir = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
         if (expectedOrientation <= 1) {
@@ -275,10 +275,6 @@ class ExifRemovalTest {
         Metadata metadata = ImageMetadataReader.readMetadata(file);
         GpsDirectory gpsDir = metadata.getFirstDirectoryOfType(GpsDirectory.class);
         assertNull(gpsDir, "GPS metadata should be stripped but was found in " + file.getName());
-    }
-
-    private static boolean isLossless(String ext) {
-        return "png".equals(ext) || "tiff".equals(ext);
     }
 
     private File resourceFile(String path) {
