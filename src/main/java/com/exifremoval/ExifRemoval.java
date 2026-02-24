@@ -91,17 +91,15 @@ public class ExifRemoval {
                 ImageIO.write(oriented, "tiff", outputFile);
                 return;
             default:
-                // Unknown format — copy unchanged rather than risk corrupting it.
+                // Unknown format — copy unchanged rather than risk corrupting it
                 if (!inputFile.equals(outputFile)) {
                     Files.copy(inputFile.toPath(), outputFile.toPath(),
                             StandardCopyOption.REPLACE_EXISTING);
                 }
-                return;
         }
     }
 
     static class ImageInfo {
-
         final int orientation;
         final boolean hasExif;
         final boolean hasIptc;
@@ -113,9 +111,12 @@ public class ExifRemoval {
             this.hasIptc = hasIptc;
             this.hasXmp = hasXmp;
         }
-
     }
 
+    // We parse metadata primarily to read the orientation tag, which the
+    // strip methods need to preserve. Since the parse already loads the full
+    // directory tree, we also record which metadata types (EXIF, IPTC, XMP)
+    // are present so we can skip files that have nothing to strip.
     static ImageInfo readImageInfo(File file) {
         try {
             Metadata metadata = ImageMetadataReader.readMetadata(file);
