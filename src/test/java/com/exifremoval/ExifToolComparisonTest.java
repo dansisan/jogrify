@@ -153,6 +153,7 @@ class ExifToolComparisonTest {
 
         assumeTrue(hasExif || hasIptc, "Skipping file without EXIF or IPTC");
         assumeFalse(isTiff(resourcePath), "TIFF re-encodes differently");
+        assumeFalse(isWebp(resourcePath), "WebP pixel comparison requires webp-imageio");
 
         File input = resourceFile(resourcePath);
         File javaOutput = outputDir.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
@@ -233,6 +234,10 @@ class ExifToolComparisonTest {
 
     private static boolean isTiff(String resourcePath) {
         return resourcePath.endsWith(".tiff") || resourcePath.endsWith(".tif");
+    }
+
+    private static boolean isWebp(String resourcePath) {
+        return resourcePath.endsWith(".webp");
     }
 
     private static String basename(String resourcePath) {

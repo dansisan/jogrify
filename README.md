@@ -94,5 +94,4 @@ Both test suites write processed images to `build/test-output/` for visual inspe
 ## Dependencies
 
 - [metadata-extractor](https://github.com/drewnoakes/metadata-extractor) -- EXIF/IPTC/XMP parsing
-- [webp-imageio](https://github.com/nicoulaj/webp-imageio) -- WebP read/write support via native libwebp
 - [JUnit 5](https://junit.org/junit5/) -- testing
