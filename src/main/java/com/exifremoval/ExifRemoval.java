@@ -78,18 +78,28 @@ public class ExifRemoval {
             case "gif":
                 stripGifMetadata(inputFile, outputFile);
                 return;
+            case "tiff":
+                // In JPEG/PNG/WebP/GIF, metadata lives in distinct segments or
+                // chunks that can be surgically removed. In TIFF, metadata tags
+                // share the same IFD structure as image layout tags (strip
+                // offsets, dimensions, etc.), so removing them requires rewriting
+                // the IFD and recalculating offsets. Instead we decode and
+                // re-encode, applying orientation by physically rotating pixels.
+                BufferedImage image = ImageIO.read(inputFile);
+                if (image == null) {
+                    throw new IllegalArgumentException("Could not decode image: " + inputFile);
+                }
+                BufferedImage oriented = applyOrientation(image, info.orientation);
+                writeImage(oriented, formatName, outputFile);
+                return;
             default:
-                break;
+                // Unknown format — copy unchanged rather than risk corrupting it.
+                if (!inputFile.equals(outputFile)) {
+                    Files.copy(inputFile.toPath(), outputFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING);
+                }
+                return;
         }
-
-        BufferedImage image = ImageIO.read(inputFile);
-
-        if (image == null) {
-            throw new IllegalArgumentException("Could not decode image: " + inputFile);
-        }
-
-        BufferedImage oriented = applyOrientation(image, info.orientation);
-        writeImage(oriented, formatName, outputFile);
     }
 
     static class ImageInfo {
