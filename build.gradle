@@ -15,9 +15,6 @@ repositories {
 dependencies {
     implementation 'com.drewnoakes:metadata-extractor:2.19.0'
 
-    // WebP read/write support (bundles native libwebp)
-    implementation 'com.github.usefulness:webp-imageio:0.10.2'
-
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
 
