@@ -14,6 +14,7 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.GpsDirectory;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvFileSource;
@@ -185,6 +186,24 @@ class ExifRemovalTest {
 
         assertArrayEquals(Files.readAllBytes(input.toPath()), Files.readAllBytes(output.toPath()),
                 filename + " should be byte-identical to input");
+    }
+
+    // ---- Wrong extension: magic bytes should override filename ----
+
+    @Test
+    void testWrongExtensionDetectedByMagicBytes() throws Exception {
+        File jpegInput = resourceFile("testdata/input/gps.jpg");
+        // Copy a JPEG to a .png extension — format detection should still
+        // identify it as JPEG via magic bytes and strip GPS metadata.
+        File misnamed = OUTPUT_DIR.resolve("gps-misnamed.png").toFile();
+        Files.copy(jpegInput.toPath(), misnamed.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        File output = OUTPUT_DIR.resolve("gps-misnamed_processed.png").toFile();
+        ExifRemoval.process(misnamed, output);
+
+        assertNoGpsMetadata(output);
+        assertTrue(output.length() < jpegInput.length(),
+                "Output should be smaller after stripping metadata");
     }
 
     // ---- Helpers ----
