@@ -10,6 +10,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -438,7 +440,7 @@ public class ExifRemoval {
         boolean wroteExif = false;
         int pos = 8;
         while (pos + 12 <= data.length) { // minimum chunk: 4 (len) + 4 (type) + 0 (data) + 4 (CRC)
-            int chunkLen = readInt(data, pos);
+            int chunkLen = ByteBuffer.wrap(data, pos, 4).getInt();
             String chunkType = new String(data, pos + 4, 4, StandardCharsets.ISO_8859_1);
             int totalChunkSize = 12 + chunkLen; // 4 (len) + 4 (type) + data + 4 (CRC)
 
@@ -532,13 +534,6 @@ public class ExifRemoval {
         return tiff.toByteArray();
     }
 
-    private static int readInt(byte[] data, int offset) {
-        return ((data[offset] & 0xFF) << 24)
-                | ((data[offset + 1] & 0xFF) << 16)
-                | ((data[offset + 2] & 0xFF) << 8)
-                | (data[offset + 3] & 0xFF);
-    }
-
     /**
      * Losslessly strip metadata from a WebP file.
      * WebP uses RIFF container: "RIFF" [size] "WEBP" followed by chunks.
@@ -563,7 +558,8 @@ public class ExifRemoval {
         int pos = 12;
         while (pos + 8 <= data.length) {
             String fourCC = new String(data, pos, 4, StandardCharsets.ISO_8859_1);
-            int chunkSize = readIntLE(data, pos + 4);
+            int chunkSize = ByteBuffer.wrap(data, pos + 4, 4)
+                    .order(ByteOrder.LITTLE_ENDIAN).getInt();
             int paddedSize = (chunkSize + 1) & ~1; // chunks are padded to even size
             int totalChunkSize = 8 + paddedSize; // 4 (FourCC) + 4 (size) + padded data
 
@@ -592,13 +588,6 @@ public class ExifRemoval {
         result[7] = (byte) ((riffSize >> 24) & 0xFF);
 
         Files.write(output.toPath(), result);
-    }
-
-    private static int readIntLE(byte[] data, int offset) {
-        return (data[offset] & 0xFF)
-                | ((data[offset + 1] & 0xFF) << 8)
-                | ((data[offset + 2] & 0xFF) << 16)
-                | ((data[offset + 3] & 0xFF) << 24);
     }
 
     /**
