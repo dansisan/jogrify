@@ -492,7 +492,9 @@ public class ExifRemoval {
 
     /**
      * Build a minimal TIFF structure with just the orientation tag.
-     * Shared by PNG (eXIf) and WebP (EXIF) chunk writers.
+     * EXIF is encoded as a TIFF byte structure regardless of the container
+     * format — JPEG (APP1), PNG (eXIf chunk), and WebP (EXIF RIFF chunk)
+     * all wrap these same raw TIFF bytes.
      */
     static byte[] buildOrientationTiff(int orientation) {
         ByteArrayOutputStream tiff = new ByteArrayOutputStream();
