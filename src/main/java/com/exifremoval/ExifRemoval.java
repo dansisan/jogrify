@@ -4,6 +4,7 @@ import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -470,25 +471,16 @@ public class ExifRemoval {
     static void writePngExifChunk(OutputStream out, int orientation) throws Exception {
         byte[] tiffData = buildOrientationTiff(orientation);
         byte[] chunkType = {'e', 'X', 'I', 'f'};
+        DataOutputStream dos = new DataOutputStream(out);
 
-        // Length (big-endian)
-        writeInt(out, tiffData.length);
-        // Chunk type
-        out.write(chunkType);
-        // Data
-        out.write(tiffData);
-        // CRC32 over type + data
+        dos.writeInt(tiffData.length);
+        dos.write(chunkType);
+        dos.write(tiffData);
+
         CRC32 crc = new CRC32();
         crc.update(chunkType);
         crc.update(tiffData);
-        writeInt(out, (int) crc.getValue());
-    }
-
-    private static void writeInt(OutputStream out, int value) throws Exception {
-        out.write((value >> 24) & 0xFF);
-        out.write((value >> 16) & 0xFF);
-        out.write((value >> 8) & 0xFF);
-        out.write(value & 0xFF);
+        dos.writeInt((int) crc.getValue());
     }
 
     /**
