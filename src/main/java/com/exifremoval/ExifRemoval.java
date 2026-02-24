@@ -59,7 +59,7 @@ public class ExifRemoval {
     static void process(File inputFile, File outputFile) throws Exception {
         ImageInfo info = readImageInfo(inputFile);
 
-        if (!info.needsProcessing()) {
+        if (!info.hasExif && !info.hasIptc && !info.hasXmp) {
             if (!inputFile.equals(outputFile)) {
                 Files.copy(inputFile.toPath(), outputFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             }
@@ -119,9 +119,6 @@ public class ExifRemoval {
             this.hasXmp = hasXmp;
         }
 
-        boolean needsProcessing() {
-            return hasExif || hasIptc || hasXmp;
-        }
     }
 
     static ImageInfo readImageInfo(File file) {
