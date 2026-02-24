@@ -442,7 +442,12 @@ public class ExifRemoval {
             String chunkType = new String(data, pos + 4, 4, StandardCharsets.ISO_8859_1);
             int totalChunkSize = 12 + chunkLen; // 4 (len) + 4 (type) + data + 4 (CRC)
 
-            if (isMetadataChunk(chunkType)) {
+            // Strip PNG chunks that carry metadata
+            if ("eXIf".equals(chunkType) // EXIF data
+                    || "tEXt".equals(chunkType) // text (may contain raw EXIF profile)
+                    || "iTXt".equals(chunkType) // international text (may contain XMP)
+                    || "zTXt".equals(chunkType) // compressed text
+                    || "iCCP".equals(chunkType)) { // ICC color profile
                 // Write orientation eXIf chunk once, right before first stripped chunk
                 if (!wroteExif && orientation > 1 && orientation <= 8) {
                     writePngExifChunk(out, orientation);
@@ -525,19 +530,6 @@ public class ExifRemoval {
         tiff.write(0);
 
         return tiff.toByteArray();
-    }
-
-    private static boolean isMetadataChunk(String chunkType) {
-        switch (chunkType) {
-            case "eXIf": // EXIF data
-            case "tEXt": // text metadata (may contain raw EXIF profile)
-            case "iTXt": // international text (may contain XMP)
-            case "zTXt": // compressed text
-            case "iCCP": // ICC color profile
-                return true;
-            default:
-                return false;
-        }
     }
 
     private static int readInt(byte[] data, int offset) {
