@@ -12,14 +12,9 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.Iterator;
 import java.util.logging.Logger;
 import java.util.zip.CRC32;
-import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.lang.ByteArrayReader;
@@ -93,7 +88,7 @@ public class ExifRemoval {
                     throw new IllegalArgumentException("Could not decode image: " + inputFile);
                 }
                 BufferedImage oriented = applyOrientation(image, info.orientation);
-                writeImage(oriented, formatName, outputFile);
+                ImageIO.write(oriented, "tiff", outputFile);
                 return;
             default:
                 // Unknown format — copy unchanged rather than risk corrupting it.
@@ -342,51 +337,6 @@ public class ExifRemoval {
             return "webp";
         }
         return "";
-    }
-
-    static void writeImage(BufferedImage image, String format, File output) throws Exception {
-        if ("webp".equals(format)) {
-            writeWithQuality(image, "webp", output, 0.80f);
-        } else if ("png".equals(format)) {
-            writeWithQuality(image, "png", output, 0.0f);
-        } else {
-            ImageIO.write(image, format, output);
-        }
-    }
-
-    static void writeWithQuality(BufferedImage image, String format, File output, float quality) throws Exception {
-        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName(format);
-        if (!writers.hasNext()) {
-            throw new IllegalStateException("No " + format.toUpperCase() + " writer available");
-        }
-        ImageWriter writer = writers.next();
-        ImageWriteParam param = writer.getDefaultWriteParam();
-        if (param.canWriteCompressed()) {
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            String[] types = param.getCompressionTypes();
-            if (types != null && types.length > 0) {
-                param.setCompressionType(types[0]);
-            }
-            param.setCompressionQuality(quality);
-        }
-
-        // Ensure we have a type compatible with JPEG (no alpha channel)
-        BufferedImage toWrite = image;
-        if ("jpeg".equals(format)
-                && (image.getType() == BufferedImage.TYPE_INT_ARGB
-                || image.getType() == BufferedImage.TYPE_4BYTE_ABGR)) {
-            toWrite = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
-            Graphics2D g = toWrite.createGraphics();
-            g.drawImage(image, 0, 0, null);
-            g.dispose();
-        }
-
-        try (ImageOutputStream ios = ImageIO.createImageOutputStream(output)) {
-            writer.setOutput(ios);
-            writer.write(null, new IIOImage(toWrite, null, null), param);
-        } finally {
-            writer.dispose();
-        }
     }
 
     /**
