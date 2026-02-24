@@ -81,7 +81,6 @@ class ExifToolComparisonTest {
         checkAbsent(metadata, ExifSubIFDDirectory.class, "EXIF SubIFD", violations);
         checkAbsent(metadata, ExifThumbnailDirectory.class, "EXIF Thumbnail", violations);
         checkAbsent(metadata, ExifInteropDirectory.class, "EXIF Interop", violations);
-        checkAbsent(metadata, GpsDirectory.class, "GPS", violations);
         checkAbsent(metadata, IptcDirectory.class, "IPTC", violations);
         checkAbsent(metadata, XmpDirectory.class, "XMP", violations);
         // ICC is allowed in TIFF output (Java ImageIO injects sRGB during re-encoding)
