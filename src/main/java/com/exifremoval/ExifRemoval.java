@@ -163,7 +163,7 @@ public class ExifRemoval {
      * Parse EXIF data from a PNG tEXt "Raw profile type exif" chunk.
      * The format is: header lines followed by hex-encoded EXIF bytes.
      */
-    static ImageInfo parseImageInfoFromRawExifProfile(String rawProfile) {
+    private static ImageInfo parseImageInfoFromRawExifProfile(String rawProfile) {
         try {
             String[] lines = rawProfile.split("\n");
             StringBuilder hexBuilder = new StringBuilder();
@@ -206,7 +206,7 @@ public class ExifRemoval {
         }
     }
 
-    static byte[] hexToBytes(String hex) {
+    private static byte[] hexToBytes(String hex) {
         int len = hex.length();
         ByteArrayOutputStream out = new ByteArrayOutputStream(len / 2);
         for (int i = 0; i + 1 < len; i += 2) {
@@ -233,7 +233,7 @@ public class ExifRemoval {
      *   7 = transverse (rotate 90 CCW + flip horizontally)
      *   8 = rotated 90 CCW
      */
-    static BufferedImage applyOrientation(BufferedImage src, int orientation) {
+    private static BufferedImage applyOrientation(BufferedImage src, int orientation) {
         if (orientation <= 1 || orientation > 8) {
             return src;
         }
@@ -296,7 +296,7 @@ public class ExifRemoval {
 
     // Detects image format by reading magic bytes from the file header.
     // See https://en.wikipedia.org/wiki/List_of_file_signatures
-    static String detectFormat(File file) throws IOException {
+    private static String detectFormat(File file) throws IOException {
         byte[] header = new byte[12];
         try (InputStream in = new FileInputStream(file)) {
             int read = in.read(header);
@@ -349,7 +349,7 @@ public class ExifRemoval {
      * and COM comments, inserts a minimal EXIF APP1 with just the orientation tag,
      * and copies all image data verbatim. Keeps APP0 (JFIF) and APP14 (Adobe color).
      */
-    static void stripJpegMetadata(File input, File output, int orientation) throws Exception {
+    private static void stripJpegMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         if (data.length < 2 || (data[0] & 0xFF) != 0xFF || (data[1] & 0xFF) != 0xD8) {
@@ -424,7 +424,7 @@ public class ExifRemoval {
      * We keep image-essential chunks (IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, sBIT, pHYs)
      * and strip metadata chunks (eXIf, tEXt, iTXt, zTXt, iCCP) that may contain GPS/EXIF data.
      */
-    static void stripPngMetadata(File input, File output, int orientation) throws Exception {
+    private static void stripPngMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         // PNG signature: 8 bytes
@@ -475,7 +475,7 @@ public class ExifRemoval {
      * Write a PNG eXIf chunk containing only the orientation tag.
      * PNG eXIf chunk data is raw TIFF/EXIF bytes (no "Exif\0\0" prefix).
      */
-    static void writePngExifChunk(OutputStream out, int orientation) throws Exception {
+    private static void writePngExifChunk(OutputStream out, int orientation) throws Exception {
         byte[] tiffData = buildOrientationTiff(orientation);
         byte[] chunkType = {'e', 'X', 'I', 'f'};
         DataOutputStream dos = new DataOutputStream(out);
@@ -496,7 +496,7 @@ public class ExifRemoval {
      * format — JPEG (APP1), PNG (eXIf chunk), and WebP (EXIF RIFF chunk)
      * all wrap these same raw TIFF bytes.
      */
-    static byte[] buildOrientationTiff(int orientation) {
+    private static byte[] buildOrientationTiff(int orientation) {
         ByteArrayOutputStream tiff = new ByteArrayOutputStream();
 
         // TIFF header (big-endian): byte order, magic, offset to IFD0
@@ -542,7 +542,7 @@ public class ExifRemoval {
      * Each chunk: [4-byte FourCC][4-byte size][data][optional pad byte].
      * We strip EXIF and XMP chunks, keep everything else.
      */
-    static void stripWebpMetadata(File input, File output, int orientation) throws Exception {
+    private static void stripWebpMetadata(File input, File output, int orientation) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         // RIFF header: "RIFF" + 4-byte size + "WEBP"
@@ -596,7 +596,7 @@ public class ExifRemoval {
      * Write a WebP EXIF chunk containing only the orientation tag.
      * WebP EXIF chunk: "EXIF" + little-endian size + raw EXIF/TIFF bytes.
      */
-    static void writeWebpExifChunk(OutputStream out, int orientation) throws Exception {
+    private static void writeWebpExifChunk(OutputStream out, int orientation) throws Exception {
         byte[] tiffData = buildOrientationTiff(orientation);
 
         // FourCC
@@ -622,7 +622,7 @@ public class ExifRemoval {
      * Comment Extensions (21 FE — may contain PII). Image data and Graphics
      * Control Extensions are copied verbatim.
      */
-    static void stripGifMetadata(File input, File output) throws Exception {
+    private static void stripGifMetadata(File input, File output) throws Exception {
         byte[] data = Files.readAllBytes(input.toPath());
 
         // GIF header: "GIF87a" or "GIF89a" (6 bytes)
@@ -733,7 +733,7 @@ public class ExifRemoval {
      * Write a minimal EXIF APP1 segment containing only the orientation tag.
      * JPEG APP1: FF E1 + length + "Exif\0\0" + TIFF data.
      */
-    static void writeOrientationApp1(OutputStream out, int orientation) throws Exception {
+    private static void writeOrientationApp1(OutputStream out, int orientation) throws Exception {
         byte[] tiffData = buildOrientationTiff(orientation);
         byte[] prefix = {'E', 'x', 'i', 'f', 0, 0};
 
