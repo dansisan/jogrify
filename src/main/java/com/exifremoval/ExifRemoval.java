@@ -5,6 +5,9 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -63,7 +66,7 @@ public class ExifRemoval {
             return;
         }
 
-        String formatName = getFormatName(inputFile.getName());
+        String formatName = detectFormat(inputFile);
 
         switch (formatName) {
             case "jpeg":
@@ -295,24 +298,53 @@ public class ExifRemoval {
         return dest;
     }
 
-    static String getFormatName(String filename) {
-        String lower = filename.toLowerCase();
-        if (lower.endsWith(".png")) {
+    // Detects image format by reading magic bytes from the file header.
+    // See https://en.wikipedia.org/wiki/List_of_file_signatures
+    static String detectFormat(File file) throws IOException {
+        byte[] header = new byte[12];
+        try (InputStream in = new FileInputStream(file)) {
+            int read = in.read(header);
+            if (read < 4) {
+                return "";
+            }
+        }
+        // JPEG: FF D8 FF — JFIF/Exif SOI marker
+        // https://en.wikipedia.org/wiki/JPEG_File_Interchange_Format
+        if (header[0] == (byte) 0xFF && header[1] == (byte) 0xD8 && header[2] == (byte) 0xFF) {
+            return "jpeg";
+        }
+        // PNG: 89 50 4E 47 — "\x89PNG" signature
+        // https://www.libpng.org/pub/png/spec/1.2/PNG-Structure.html
+        if (header[0] == (byte) 0x89 && header[1] == 'P'
+                && header[2] == 'N' && header[3] == 'G') {
             return "png";
         }
-        if (lower.endsWith(".gif")) {
+        // GIF: 47 49 46 38 — "GIF8" (GIF87a or GIF89a)
+        // https://www.w3.org/Graphics/GIF/spec-gif89a.txt
+        if (header[0] == 'G' && header[1] == 'I' && header[2] == 'F' && header[3] == '8') {
             return "gif";
         }
-        if (lower.endsWith(".bmp")) {
+        // BMP: 42 4D — "BM"
+        // https://en.wikipedia.org/wiki/BMP_file_format
+        if (header[0] == 'B' && header[1] == 'M') {
             return "bmp";
         }
-        if (lower.endsWith(".tiff") || lower.endsWith(".tif")) {
+        // TIFF: "II" (little-endian) or "MM" (big-endian) followed by 0x002A
+        // https://en.wikipedia.org/wiki/TIFF
+        if (header[0] == 'I' && header[1] == 'I' && header[2] == 0x2A && header[3] == 0x00) {
             return "tiff";
         }
-        if (lower.endsWith(".webp")) {
+        if (header[0] == 'M' && header[1] == 'M' && header[2] == 0x00 && header[3] == 0x2A) {
+            return "tiff";
+        }
+        // WebP: RIFF container with "WEBP" FourCC at offset 8
+        // https://developers.google.com/speed/webp/docs/riff_container
+        if (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F'
+                && header[8] == 'W' && header[9] == 'E'
+                && header[10] == 'B' && header[11] == 'P') {
             return "webp";
         }
-        return "jpeg";
+        return "";
     }
 
     static void writeImage(BufferedImage image, String format, File output) throws Exception {
