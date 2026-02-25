@@ -58,15 +58,18 @@ public class ExifRemoval {
 
     static void process(File inputFile, File outputFile) throws Exception {
         ImageInfo info = readImageInfo(inputFile);
+        String formatName = detectFormat(inputFile);
 
-        if (!info.hasExif && !info.hasIptc && !info.hasXmp) {
+        // HEIC is excluded from this gate because metadata-extractor does not
+        // detect XMP in HEIC files; the strip method handles it at the
+        // container level by removing all Exif/mime items from iinf/iloc/iref.
+        if (!info.hasExif && !info.hasIptc && !info.hasXmp
+                && !"heic".equals(formatName)) {
             if (!inputFile.equals(outputFile)) {
                 Files.copy(inputFile.toPath(), outputFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             }
             return;
         }
-
-        String formatName = detectFormat(inputFile);
 
         switch (formatName) {
             case "jpeg":
