@@ -62,24 +62,26 @@ class ExifRemovalTest {
             "gps.jpg,  jpg",
             "gps.png,  png",
             "gps.tiff, tiff",
-            "gps.webp, webp"
+            "gps.webp, webp",
+            "gps.heic, heic"
     })
     void testGpsMetadataStripped(String filename, String ext) throws Exception {
         File input = resourceFile("testdata/input/" + filename);
-        File expected = resourceFile("testdata/expected/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
-        copyExpected(expected, filename);
 
         assertNoGpsMetadata(output);
 
-        if ("jpg".equals(ext) || "png".equals(ext) || "webp".equals(ext)) {
+        if ("jpg".equals(ext) || "png".equals(ext) || "webp".equals(ext)
+                || "heic".equals(ext)) {
             // Lossless strip — output must be smaller than input
             assertTrue(output.length() < input.length(),
                     filename + " output should be smaller than input");
         } else {
             // TIFF: still re-encoded
+            File expected = resourceFile("testdata/expected/" + filename);
+            copyExpected(expected, filename);
             BufferedImage actualImg = ImageIO.read(output);
             BufferedImage expectedImg = ImageIO.read(expected);
 
@@ -137,20 +139,21 @@ class ExifRemovalTest {
             "rotate.jpg,  jpg",
             "rotate.png,  png",
             "rotate.tiff, tiff",
-            "rotate.webp, webp"
+            "rotate.webp, webp",
+            "rotate.heic, heic"
     })
     void testRotationApplied(String filename, String ext) throws Exception {
         File input = resourceFile("testdata/input/" + filename);
-        File expected = resourceFile("testdata/expected/" + filename);
 
         File output = processImage(input, filename);
         copyOriginal(input, filename);
-        copyExpected(expected, filename);
 
         assertNoGpsMetadata(output);
 
         if ("tiff".equals(ext)) {
             // TIFF: still re-encoded with orientation applied
+            File expected = resourceFile("testdata/expected/" + filename);
+            copyExpected(expected, filename);
             BufferedImage actualImg = ImageIO.read(output);
             BufferedImage expectedImg = ImageIO.read(expected);
 
