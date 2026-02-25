@@ -387,9 +387,19 @@ public class ExifRemoval {
                 break;
             }
 
+            if (pos + 3 >= data.length) {
+                out.write(data, pos, data.length - pos);
+                break;
+            }
+
             // Read segment length (2 bytes, big-endian, includes itself)
             int len = ((data[pos + 2] & 0xFF) << 8) | (data[pos + 3] & 0xFF);
             int segmentSize = 2 + len; // 2 for marker bytes + length (which includes its own 2 bytes)
+
+            if (pos + segmentSize > data.length) {
+                out.write(data, pos, data.length - pos);
+                break;
+            }
 
             // Strip all metadata APP segments:
             //   APP1  (0xE1) = EXIF, XMP
@@ -441,6 +451,9 @@ public class ExifRemoval {
         int pos = 8;
         while (pos + 12 <= data.length) { // minimum chunk: 4 (len) + 4 (type) + 0 (data) + 4 (CRC)
             int chunkLen = ByteBuffer.wrap(data, pos, 4).getInt();
+            if (chunkLen < 0 || pos + 12 + chunkLen > data.length) {
+                break;
+            }
             String chunkType = new String(data, pos + 4, 4, StandardCharsets.ISO_8859_1);
             int totalChunkSize = 12 + chunkLen; // 4 (len) + 4 (type) + data + 4 (CRC)
 
@@ -562,6 +575,9 @@ public class ExifRemoval {
             String fourCC = new String(data, pos, 4, StandardCharsets.ISO_8859_1);
             int chunkSize = ByteBuffer.wrap(data, pos + 4, 4)
                     .order(ByteOrder.LITTLE_ENDIAN).getInt();
+            if (chunkSize < 0 || pos + 8 + chunkSize > data.length) {
+                break;
+            }
             int paddedSize = (chunkSize + 1) & ~1; // chunks are padded to even size
             int totalChunkSize = 8 + paddedSize; // 4 (FourCC) + 4 (size) + padded data
 
@@ -626,7 +642,7 @@ public class ExifRemoval {
         byte[] data = Files.readAllBytes(input.toPath());
 
         // GIF header: "GIF87a" or "GIF89a" (6 bytes)
-        if (data.length < 6 || data[0] != 'G' || data[1] != 'I' || data[2] != 'F') {
+        if (data.length < 13 || data[0] != 'G' || data[1] != 'I' || data[2] != 'F') {
             throw new IllegalArgumentException("Not a valid GIF file: " + input);
         }
 
