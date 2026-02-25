@@ -119,6 +119,7 @@ class ExifToolComparisonTest {
         assumeTrue(hasExif, "Skipping file without EXIF");
         assumeTrue(orientation > 1, "No non-trivial orientation to preserve");
         assumeFalse(isTiff(resourcePath), "TIFF applies orientation as pixel transform");
+        assumeFalse(isHeic(resourcePath), "HEIC orientation uses irot/imir, not EXIF tag");
 
         File input = resourceFile(resourcePath);
         File output = OUTPUT_DIR.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
@@ -146,6 +147,7 @@ class ExifToolComparisonTest {
         assumeTrue(hasExif || hasIptc || hasXmp, "Skipping file without EXIF, IPTC, or XMP");
         assumeFalse(isTiff(resourcePath), "TIFF re-encodes differently");
         assumeFalse(isWebp(resourcePath), "WebP pixel comparison requires webp-imageio");
+        assumeFalse(isHeic(resourcePath), "HEIC pixel comparison requires HEIF decoder");
 
         File input = resourceFile(resourcePath);
         File javaOutput = OUTPUT_DIR.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
@@ -231,6 +233,10 @@ class ExifToolComparisonTest {
 
     private static boolean isWebp(String resourcePath) {
         return resourcePath.endsWith(".webp");
+    }
+
+    private static boolean isHeic(String resourcePath) {
+        return resourcePath.endsWith(".heic") || resourcePath.endsWith(".heif");
     }
 
     private static String basename(String resourcePath) {

@@ -15,6 +15,8 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
@@ -78,6 +80,9 @@ public class ExifRemoval {
                 return;
             case "gif":
                 stripGifMetadata(inputFile, outputFile);
+                return;
+            case "heic":
+                stripHeicMetadata(inputFile, outputFile);
                 return;
             case "tiff":
                 // In JPEG/PNG/WebP/GIF, metadata lives in distinct segments or
@@ -339,6 +344,14 @@ public class ExifRemoval {
                 && header[8] == 'W' && header[9] == 'E'
                 && header[10] == 'B' && header[11] == 'P') {
             return "webp";
+        }
+        // HEIC/HEIF: ISOBMFF container with "ftyp" box type and HEIF major brand
+        // https://nokiatech.github.io/heif/technical.html
+        if (header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p') {
+            String brand = new String(header, 8, 4, StandardCharsets.ISO_8859_1);
+            if ("heic".equals(brand) || "heix".equals(brand) || "mif1".equals(brand)) {
+                return "heic";
+            }
         }
         return "";
     }
@@ -727,6 +740,360 @@ public class ExifRemoval {
             pos += size;
         }
         return pos;
+    }
+
+    /**
+     * Losslessly strip metadata from a HEIC/HEIF file.
+     * HEIC uses ISOBMFF (ISO Base Media File Format) where metadata (EXIF, XMP) is
+     * stored as separate items in mdat, referenced via iinf/iloc in the meta box.
+     * We rebuild the meta box, filtering out metadata item entries from iinf, iloc,
+     * and iref, while copying all other boxes (ftyp, mdat, iprp) verbatim.
+     * Orientation is preserved via irot/imir property boxes in iprp (not EXIF tags).
+     */
+    private static void stripHeicMetadata(File input, File output) throws Exception {
+        byte[] data = Files.readAllBytes(input.toPath());
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+
+        int pos = 0;
+        while (pos < data.length) {
+            int boxSize = isobmffBoxSize(data, pos);
+            String boxType = isobmffBoxType(data, pos);
+
+            if (boxSize == 0) {
+                // Box extends to end of file
+                boxSize = data.length - pos;
+            }
+
+            if ("meta".equals(boxType)) {
+                rebuildHeicMetaBox(data, pos, pos + boxSize, out);
+            } else {
+                out.write(data, pos, boxSize);
+            }
+            pos += boxSize;
+        }
+
+        Files.write(output.toPath(), out.toByteArray());
+    }
+
+    /** Read an ISOBMFF box size, handling extended size (size field == 1). */
+    private static int isobmffBoxSize(byte[] data, int pos) {
+        int size32 = ByteBuffer.wrap(data, pos, 4).getInt();
+        if (size32 == 1 && pos + 16 <= data.length) {
+            // Extended size: 8-byte size follows the type field
+            return (int) ByteBuffer.wrap(data, pos + 8, 8).getLong();
+        }
+        return size32;
+    }
+
+    /** Read a 4-byte ISOBMFF box type as a String. */
+    private static String isobmffBoxType(byte[] data, int pos) {
+        return new String(data, pos + 4, 4, StandardCharsets.ISO_8859_1);
+    }
+
+    /** Return the header length for an ISOBMFF box (8 normal, 16 extended). */
+    private static int isobmffHeaderLen(byte[] data, int pos) {
+        return ByteBuffer.wrap(data, pos, 4).getInt() == 1 ? 16 : 8;
+    }
+
+    /**
+     * Rebuild the HEIC meta box, removing metadata items (EXIF, XMP) from
+     * iinf, iloc, and iref while preserving everything else (hdlr, pitm, iprp).
+     */
+    private static void rebuildHeicMetaBox(byte[] data, int metaStart, int metaEnd,
+                                           ByteArrayOutputStream out) throws IOException {
+        int headerLen = isobmffHeaderLen(data, metaStart);
+        // meta is a FullBox: 4 bytes version+flags after the box header
+        int vfStart = metaStart + headerLen;
+        int childrenStart = vfStart + 4;
+
+        // First pass: collect metadata item IDs from iinf
+        Set<Integer> metadataItemIds = new HashSet<>();
+        int pos = childrenStart;
+        while (pos < metaEnd) {
+            int boxSize = isobmffBoxSize(data, pos);
+            if (boxSize == 0) {
+                boxSize = metaEnd - pos;
+            }
+            if ("iinf".equals(isobmffBoxType(data, pos))) {
+                collectHeicMetadataItemIds(data, pos, pos + boxSize, metadataItemIds);
+            }
+            pos += boxSize;
+        }
+
+        // Second pass: rebuild children, filtering metadata from iinf/iloc/iref
+        ByteArrayOutputStream children = new ByteArrayOutputStream();
+        pos = childrenStart;
+        while (pos < metaEnd) {
+            int boxSize = isobmffBoxSize(data, pos);
+            String boxType = isobmffBoxType(data, pos);
+            if (boxSize == 0) {
+                boxSize = metaEnd - pos;
+            }
+            int boxEnd = pos + boxSize;
+
+            if ("iinf".equals(boxType)) {
+                rebuildHeicIinf(data, pos, boxEnd, metadataItemIds, children);
+            } else if ("iloc".equals(boxType)) {
+                rebuildHeicIloc(data, pos, boxEnd, metadataItemIds, children);
+            } else if ("iref".equals(boxType)) {
+                rebuildHeicIref(data, pos, boxEnd, metadataItemIds, children);
+            } else {
+                // hdlr, pitm, iprp, idat, grpl, etc. — copy verbatim
+                children.write(data, pos, boxSize);
+            }
+            pos = boxEnd;
+        }
+
+        // Write rebuilt meta box with corrected size
+        byte[] childBytes = children.toByteArray();
+        int metaBoxSize = headerLen + 4 + childBytes.length;
+        DataOutputStream dos = new DataOutputStream(out);
+        dos.writeInt(metaBoxSize);
+        dos.write(new byte[] {'m', 'e', 't', 'a'});
+        dos.write(data, vfStart, 4); // version + flags
+        dos.write(childBytes);
+    }
+
+    /**
+     * Scan iinf to find item IDs of type "Exif" or "mime" (XMP).
+     * iinf is a FullBox containing nested infe FullBox entries.
+     */
+    private static void collectHeicMetadataItemIds(byte[] data, int iinfStart, int iinfEnd,
+                                                   Set<Integer> ids) {
+        int headerLen = isobmffHeaderLen(data, iinfStart);
+        int version = data[iinfStart + headerLen] & 0xFF;
+
+        // entry_count: uint16 (v0) or uint32 (v>0)
+        int childPos = iinfStart + headerLen + 4 + (version == 0 ? 2 : 4);
+
+        while (childPos < iinfEnd) {
+            int infeSize = isobmffBoxSize(data, childPos);
+            if (infeSize == 0) {
+                break;
+            }
+            parseHeicInfe(data, childPos, childPos + infeSize, ids);
+            childPos += infeSize;
+        }
+    }
+
+    /** Parse a single infe FullBox to extract item_ID and item_type. */
+    private static void parseHeicInfe(byte[] data, int start, int end,
+                                      Set<Integer> metadataItemIds) {
+        int headerLen = isobmffHeaderLen(data, start);
+        int infeVersion = data[start + headerLen] & 0xFF;
+
+        if (infeVersion < 2) {
+            return; // v0/v1 infe don't have item_type FourCC
+        }
+
+        int fp = start + headerLen + 4; // skip version(1) + flags(3)
+
+        int itemId;
+        if (infeVersion == 2) {
+            itemId = ByteBuffer.wrap(data, fp, 2).getShort() & 0xFFFF;
+            fp += 2;
+        } else { // v3+
+            itemId = ByteBuffer.wrap(data, fp, 4).getInt();
+            fp += 4;
+        }
+
+        fp += 2; // skip item_protection_index
+
+        if (fp + 4 <= end) {
+            String itemType = new String(data, fp, 4, StandardCharsets.ISO_8859_1);
+            if ("Exif".equals(itemType) || "mime".equals(itemType)) {
+                metadataItemIds.add(itemId);
+            }
+        }
+    }
+
+    /** Read item_ID from an infe box (used by rebuildHeicIinf). */
+    private static int readHeicInfeItemId(byte[] data, int start) {
+        int headerLen = isobmffHeaderLen(data, start);
+        int infeVersion = data[start + headerLen] & 0xFF;
+        int fp = start + headerLen + 4;
+        if (infeVersion >= 3) {
+            return ByteBuffer.wrap(data, fp, 4).getInt();
+        }
+        return ByteBuffer.wrap(data, fp, 2).getShort() & 0xFFFF;
+    }
+
+    /** Rebuild iinf box, skipping infe entries for metadata items. */
+    private static void rebuildHeicIinf(byte[] data, int start, int end,
+                                        Set<Integer> metadataItemIds,
+                                        ByteArrayOutputStream out) throws IOException {
+        int headerLen = isobmffHeaderLen(data, start);
+        int version = data[start + headerLen] & 0xFF;
+        int countFieldSize = (version == 0) ? 2 : 4;
+
+        // entry_count position
+        int childPos = start + headerLen + 4 + countFieldSize;
+
+        // Collect non-metadata infe boxes
+        ByteArrayOutputStream infeBytes = new ByteArrayOutputStream();
+        int keptCount = 0;
+        while (childPos < end) {
+            int infeSize = isobmffBoxSize(data, childPos);
+            if (infeSize == 0) {
+                break;
+            }
+            int itemId = readHeicInfeItemId(data, childPos);
+            if (!metadataItemIds.contains(itemId)) {
+                infeBytes.write(data, childPos, infeSize);
+                keptCount++;
+            }
+            childPos += infeSize;
+        }
+
+        // Write rebuilt iinf box
+        byte[] kept = infeBytes.toByteArray();
+        int iinfBoxSize = headerLen + 4 + countFieldSize + kept.length;
+        DataOutputStream dos = new DataOutputStream(out);
+        dos.writeInt(iinfBoxSize);
+        dos.write(new byte[] {'i', 'i', 'n', 'f'});
+        dos.write(data, start + headerLen, 4); // version + flags
+        if (version == 0) {
+            dos.writeShort(keptCount);
+        } else {
+            dos.writeInt(keptCount);
+        }
+        dos.write(kept);
+    }
+
+    /**
+     * Rebuild iloc box, skipping entries for metadata items.
+     * iloc has variable-length fields configured by size bytes in its header.
+     */
+    private static void rebuildHeicIloc(byte[] data, int start, int end,
+                                        Set<Integer> metadataItemIds,
+                                        ByteArrayOutputStream out) throws IOException {
+        int headerLen = isobmffHeaderLen(data, start);
+        int version = data[start + headerLen] & 0xFF;
+
+        int fp = start + headerLen + 4; // after version+flags
+
+        int sizeByte1 = data[fp] & 0xFF;
+        int offsetSize = (sizeByte1 >> 4) & 0xF;
+        int lengthSize = sizeByte1 & 0xF;
+
+        int sizeByte2 = data[fp + 1] & 0xFF;
+        int baseOffsetSize = (sizeByte2 >> 4) & 0xF;
+        int indexSize = (version >= 1) ? (sizeByte2 & 0xF) : 0;
+
+        int countPos = fp + 2;
+        int itemCount;
+        int itemIdSize;
+        if (version < 2) {
+            itemCount = ByteBuffer.wrap(data, countPos, 2).getShort() & 0xFFFF;
+            itemIdSize = 2;
+        } else {
+            itemCount = ByteBuffer.wrap(data, countPos, 4).getInt();
+            itemIdSize = 4;
+        }
+        int countFieldSize = (version < 2) ? 2 : 4;
+        int entryPos = countPos + countFieldSize;
+
+        // Parse entries, collect non-metadata ones as raw byte spans
+        ByteArrayOutputStream entryBytes = new ByteArrayOutputStream();
+        int keptCount = 0;
+        for (int i = 0; i < itemCount; i++) {
+            int entryStart = entryPos;
+
+            // item_ID
+            int itemId;
+            if (version < 2) {
+                itemId = ByteBuffer.wrap(data, entryPos, 2).getShort() & 0xFFFF;
+            } else {
+                itemId = ByteBuffer.wrap(data, entryPos, 4).getInt();
+            }
+            entryPos += itemIdSize;
+
+            // construction_method (v>=1)
+            if (version >= 1) {
+                entryPos += 2;
+            }
+
+            entryPos += 2; // data_reference_index
+            entryPos += baseOffsetSize; // base_offset
+
+            int extentCount = ByteBuffer.wrap(data, entryPos, 2).getShort() & 0xFFFF;
+            entryPos += 2;
+
+            for (int e = 0; e < extentCount; e++) {
+                if (version >= 1 && indexSize > 0) {
+                    entryPos += indexSize;
+                }
+                entryPos += offsetSize;
+                entryPos += lengthSize;
+            }
+
+            if (!metadataItemIds.contains(itemId)) {
+                entryBytes.write(data, entryStart, entryPos - entryStart);
+                keptCount++;
+            }
+        }
+
+        // Write rebuilt iloc box
+        byte[] entries = entryBytes.toByteArray();
+        int ilocBoxSize = headerLen + 4 + 2 + countFieldSize + entries.length;
+        DataOutputStream dos = new DataOutputStream(out);
+        dos.writeInt(ilocBoxSize);
+        dos.write(new byte[] {'i', 'l', 'o', 'c'});
+        dos.write(data, start + headerLen, 4); // version + flags
+        dos.writeByte(sizeByte1);
+        dos.writeByte(sizeByte2);
+        if (version < 2) {
+            dos.writeShort(keptCount);
+        } else {
+            dos.writeInt(keptCount);
+        }
+        dos.write(entries);
+    }
+
+    /**
+     * Rebuild iref box, skipping reference boxes whose from_item_ID is a metadata item.
+     * iref is a FullBox containing nested typed reference boxes.
+     */
+    private static void rebuildHeicIref(byte[] data, int start, int end,
+                                        Set<Integer> metadataItemIds,
+                                        ByteArrayOutputStream out) throws IOException {
+        int headerLen = isobmffHeaderLen(data, start);
+        int version = data[start + headerLen] & 0xFF;
+        int childPos = start + headerLen + 4; // after version+flags
+
+        ByteArrayOutputStream refBytes = new ByteArrayOutputStream();
+        while (childPos < end) {
+            int refSize = isobmffBoxSize(data, childPos);
+            if (refSize == 0) {
+                break;
+            }
+            int refHeaderLen = isobmffHeaderLen(data, childPos);
+
+            int fromItemId;
+            if (version == 0) {
+                fromItemId = ByteBuffer.wrap(data, childPos + refHeaderLen, 2).getShort() & 0xFFFF;
+            } else {
+                fromItemId = ByteBuffer.wrap(data, childPos + refHeaderLen, 4).getInt();
+            }
+
+            if (!metadataItemIds.contains(fromItemId)) {
+                refBytes.write(data, childPos, refSize);
+            }
+            childPos += refSize;
+        }
+
+        byte[] refs = refBytes.toByteArray();
+        if (refs.length == 0) {
+            return; // omit empty iref box entirely
+        }
+
+        int irefBoxSize = headerLen + 4 + refs.length;
+        DataOutputStream dos = new DataOutputStream(out);
+        dos.writeInt(irefBoxSize);
+        dos.write(new byte[] {'i', 'r', 'e', 'f'});
+        dos.write(data, start + headerLen, 4); // version + flags
+        dos.write(refs);
     }
 
     /**
