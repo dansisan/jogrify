@@ -702,6 +702,9 @@ public class ExifRemoval {
             }
 
             if (blockType == 0x21) { // Extension
+                if (pos + 2 > data.length) {
+                    break;
+                }
                 int label = data[pos + 1] & 0xFF;
 
                 if (label == 0xFE) {
@@ -719,6 +722,9 @@ public class ExifRemoval {
                 }
 
                 if (label == 0xFF) {
+                    if (pos + 3 > data.length) {
+                        break;
+                    }
                     // Application Extension — peek at identifier
                     int blockSize = data[pos + 2] & 0xFF;
                     boolean isNetscape = blockSize >= 8
