@@ -671,6 +671,9 @@ public class ExifRemoval {
             }
 
             if (blockType == 0x2C) { // Image Descriptor
+                if (pos + 10 > data.length) {
+                    break;
+                }
                 // Copy Image Descriptor (10 bytes min)
                 out.write(data, pos, 10);
                 int imgPacked = data[pos + 9] & 0xFF;
@@ -679,10 +682,16 @@ public class ExifRemoval {
                 // Copy Local Color Table if present
                 if ((imgPacked & 0x80) != 0) {
                     int lctSize = 3 * (1 << ((imgPacked & 0x07) + 1));
+                    if (pos + lctSize > data.length) {
+                        break;
+                    }
                     out.write(data, pos, lctSize);
                     pos += lctSize;
                 }
 
+                if (pos >= data.length) {
+                    break;
+                }
                 // Copy LZW Minimum Code Size
                 out.write(data[pos] & 0xFF);
                 pos++;
