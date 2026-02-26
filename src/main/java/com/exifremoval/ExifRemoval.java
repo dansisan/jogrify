@@ -287,7 +287,7 @@ public class ExifRemoval {
         int destH = swapDimensions ? w : h;
 
         BufferedImage dest = new BufferedImage(
-                destW, destH, src.getType() != 0 ? src.getType() : BufferedImage.TYPE_INT_RGB);
+                destW, destH, src.getType() != 0 ? src.getType() : BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = dest.createGraphics();
         g.drawImage(src, t, null);
         g.dispose();
