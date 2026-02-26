@@ -765,6 +765,9 @@ public class ExifRemoval {
             if (size == 0) {
                 break;
             }
+            if (pos + size > data.length) {
+                break;
+            }
             out.write(data, pos, size);
             pos += size;
         }
