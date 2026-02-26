@@ -451,7 +451,7 @@ public class ExifRemoval {
         int pos = 8;
         while (pos + 12 <= data.length) { // minimum chunk: 4 (len) + 4 (type) + 0 (data) + 4 (CRC)
             int chunkLen = ByteBuffer.wrap(data, pos, 4).getInt();
-            if (chunkLen < 0 || pos + 12 + chunkLen > data.length) {
+            if (chunkLen < 0 || (long) pos + 12 + chunkLen > data.length) {
                 break;
             }
             String chunkType = new String(data, pos + 4, 4, StandardCharsets.ISO_8859_1);
@@ -575,7 +575,7 @@ public class ExifRemoval {
             String fourCC = new String(data, pos, 4, StandardCharsets.ISO_8859_1);
             int chunkSize = ByteBuffer.wrap(data, pos + 4, 4)
                     .order(ByteOrder.LITTLE_ENDIAN).getInt();
-            if (chunkSize < 0 || pos + 8 + chunkSize > data.length) {
+            if (chunkSize < 0 || (long) pos + 8 + chunkSize > data.length) {
                 break;
             }
             int paddedSize = (chunkSize + 1) & ~1; // chunks are padded to even size
