@@ -695,15 +695,9 @@ public class ExifRemoval {
             if (blockType == 0x21) { // Extension
                 int label = data[pos + 1] & 0xFF;
 
-                if (label == 0xFF || label == 0xFE) {
-                    // Application Extension (0xFF) or Comment Extension (0xFE) — skip
+                if (label == 0xFE) {
+                    // Strip Comment Extension
                     pos += 2;
-                    // Skip block size + data for Application Extension header
-                    if (label == 0xFF) {
-                        int blockSize = data[pos] & 0xFF;
-                        pos += 1 + blockSize; // skip block size byte + app identifier
-                    }
-                    // Skip sub-blocks (size + data pairs until zero terminator)
                     while (pos < data.length) {
                         int size = data[pos] & 0xFF;
                         pos++;
@@ -713,6 +707,29 @@ public class ExifRemoval {
                         pos += size;
                     }
                     continue;
+                }
+
+                if (label == 0xFF) {
+                    // Application Extension — peek at identifier
+                    int blockSize = data[pos + 2] & 0xFF;
+                    boolean isNetscape = blockSize >= 8
+                        && pos + 3 + blockSize <= data.length
+                        && "NETSCAPE".equals(new String(data, pos + 3, 8, StandardCharsets.ISO_8859_1));
+
+                    if (!isNetscape) {
+                        // Strip non-essential app extensions (XMP, etc.)
+                        pos += 2;
+                        pos += 1 + blockSize;
+                        while (pos < data.length) {
+                            int size = data[pos] & 0xFF;
+                            pos++;
+                            if (size == 0) {
+                                break;
+                            }
+                            pos += size;
+                        }
+                        continue;
+                    }
                 }
 
                 // Other extensions (e.g. Graphics Control 0xF9) — copy
