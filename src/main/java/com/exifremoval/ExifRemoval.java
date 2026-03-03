@@ -718,6 +718,10 @@ public class ExifRemoval {
                         if (size == 0) {
                             break;
                         }
+                        if (pos + size > data.length) {
+                            pos = data.length;
+                            break;
+                        }
                         pos += size;
                     }
                     continue;
@@ -741,6 +745,10 @@ public class ExifRemoval {
                             int size = data[pos] & 0xFF;
                             pos++;
                             if (size == 0) {
+                                break;
+                            }
+                            if (pos + size > data.length) {
+                                pos = data.length;
                                 break;
                             }
                             pos += size;
