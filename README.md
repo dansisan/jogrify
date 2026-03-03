@@ -1,6 +1,6 @@
 # exif-removal
 
-A command-line tool that losslessly strips metadata from images while preserving the EXIF orientation tag. For JPEG, PNG, WebP, and GIF, image data is never re-encoded — only metadata segments are removed. This avoids quality loss from lossy re-compression and pixel differences from codec mismatches.
+Losslessly strips metadata from images while preserving the EXIF orientation tag. Intended for use as a `StorageItemBeforeSave` hook — the CLI is just for testing. For JPEG, PNG, WebP, and GIF, image data is never re-encoded — only metadata segments are removed. This avoids quality loss from lossy re-compression and pixel differences from codec mismatches.
 
 ## Supported formats
 
@@ -91,6 +91,22 @@ Both test suites write processed images to `build/test-output/` for visual inspe
 
 - **`build/test-output/`** — `ExifRemovalTest` output. Contains `_processed`, `_original`, and `_expected` copies side by side for its hardcoded test cases (gps.*, rotate.*, Landscape_*).
 - **`build/test-output/exiftool-comparison/`** — `ExifToolComparisonTest` output. Contains `_original` and `_processed` pairs for every image in the CSV.
+
+## Why not mogrify?
+
+The previous approach was to run `mogrify -strip -auto-orient` on every image. This works but has significant downsides:
+
+| | `mogrify -strip -auto-orient` | exif-removal |
+|---|---|---|
+| **JPEG quality** | Re-encodes, introducing generation loss on every run | Copies image data verbatim — zero quality loss |
+| **PNG/WebP/GIF** | Re-encodes through ImageMagick's codec | Copies image data verbatim |
+| **Orientation** | `-auto-orient` applies as pixel rotation (changes dimensions, re-encodes) | Preserves the tag in a minimal EXIF segment (no pixel changes) |
+| **File size** | Output often larger due to re-encoding differences | Output is smaller (metadata removed, image data unchanged) |
+| **Idempotency** | Each run re-encodes, producing different bytes | Running twice produces identical output |
+| **Dependencies** | Requires ImageMagick installed | Self-contained Java (no native dependencies) |
+| **TIFF** | Same — must re-encode | Same — must re-encode (TIFF interleaves metadata with image data) |
+
+The core problem with `mogrify -strip -auto-orient` is that it decodes and re-encodes the entire image just to remove metadata. For lossy formats like JPEG, this means quality degrades every time. For lossless formats, pixel data is still round-tripped through a codec unnecessarily. This tool avoids all of that by parsing the container format and surgically removing only the metadata segments.
 
 ## Dependencies
 
