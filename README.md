@@ -102,8 +102,7 @@ In detail:
 
 | | `mogrify -strip -auto-orient` | exif-removal |
 |---|---|---|
-| **JPEG quality** | Re-encodes, introducing generation loss on every run | Copies image data verbatim — zero quality loss |
-| **PNG/WebP/GIF** | Re-encodes through ImageMagick's codec | Copies image data verbatim |
+| **Image data** | Re-encodes every format (lossy for JPEG, unnecessary for PNG/WebP/GIF) | Copies image data verbatim — zero quality loss |
 | **Orientation** | `-auto-orient` applies as pixel rotation (changes dimensions, re-encodes) | Preserves the tag in a minimal EXIF segment (no pixel changes) |
 | **PNG eXIf orientation** | ImageMagick 6 doesn't read eXIf chunks, so `-auto-orient` is a no-op but `-strip` still removes the chunk — the orientation is lost and the image appears rotated incorrectly | Converts eXIf to a tEXt raw profile that ImageMagick 6 understands |
 | **File size** | Output often larger due to re-encoding differences | Output is smaller (metadata removed, image data unchanged) |
