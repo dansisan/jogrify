@@ -110,5 +110,5 @@ The core problem with `mogrify -strip -auto-orient` is that it decodes and re-en
 
 ## Dependencies
 
-- [metadata-extractor](https://github.com/drewnoakes/metadata-extractor) -- EXIF/IPTC/XMP parsing
+- [metadata-extractor](https://github.com/drewnoakes/metadata-extractor) -- EXIF/IPTC/XMP parsing. Versions prior to 2.18 don't parse PNG eXIf chunks, so there's a built-in fallback that scans for eXIf chunks directly at the byte level.
 - [JUnit 5](https://junit.org/junit5/) -- testing

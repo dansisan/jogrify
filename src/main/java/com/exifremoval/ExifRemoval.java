@@ -150,6 +150,14 @@ public class ExifRemoval {
                         }
                     }
                 }
+
+                // Fallback: scan for PNG eXIf chunk directly. Older versions of
+                // metadata-extractor don't parse eXIf into ExifIFD0Directory.
+                Integer eXIfOri = readPngEXIfOrientation(file);
+                if (eXIfOri != null) {
+                    hasExif = true;
+                    orientation = eXIfOri;
+                }
             }
 
             return new ImageInfo(orientation, hasExif, hasIptc, hasXmp);
@@ -204,6 +212,53 @@ public class ExifRemoval {
             // Malformed EXIF profile — ignore
             return null;
         }
+    }
+
+    /**
+     * Scan a PNG file for an eXIf chunk and extract the orientation value.
+     * Returns the orientation (1-8) if an eXIf chunk is found, or null if not.
+     * This provides a fallback for metadata-extractor versions that don't
+     * parse eXIf chunks (support was added in v2.18).
+     */
+    private static Integer readPngEXIfOrientation(File file) {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] sig = new byte[8];
+            if (fis.read(sig) != 8 || sig[0] != (byte) 0x89 || sig[1] != 'P') {
+                return null;
+            }
+            byte[] hdr = new byte[8];
+            while (fis.read(hdr) == 8) {
+                int chunkLen = ((hdr[0] & 0xFF) << 24) | ((hdr[1] & 0xFF) << 16)
+                        | ((hdr[2] & 0xFF) << 8) | (hdr[3] & 0xFF);
+                String chunkType = new String(hdr, 4, 4, StandardCharsets.ISO_8859_1);
+
+                if ("eXIf".equals(chunkType)) {
+                    byte[] exifData = fis.readNBytes(chunkLen);
+                    if (exifData.length != chunkLen) {
+                        return null;
+                    }
+                    // eXIf chunk contains raw TIFF data (no Exif\0\0 preamble)
+                    Metadata exifMeta = new Metadata();
+                    new ExifReader().extract(
+                            new ByteArrayReader(exifData), exifMeta, 0);
+                    ExifIFD0Directory dir =
+                            exifMeta.getFirstDirectoryOfType(ExifIFD0Directory.class);
+                    if (dir != null
+                            && dir.containsTag(ExifIFD0Directory.TAG_ORIENTATION)) {
+                        return dir.getInt(ExifIFD0Directory.TAG_ORIENTATION);
+                    }
+                    return 1; // eXIf found but no orientation tag
+                }
+
+                if ("IDAT".equals(chunkType) || "IEND".equals(chunkType)) {
+                    break;
+                }
+                fis.skip((long) chunkLen + 4); // skip chunk data + CRC
+            }
+        } catch (Exception e) {
+            // Not a PNG or can't read — fall through
+        }
+        return null;
     }
 
     private static byte[] hexToBytes(String hex) {
