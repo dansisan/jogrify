@@ -94,9 +94,9 @@ Both test suites write processed images to `build/test-output/` for visual inspe
 
 ## Why not mogrify?
 
-The previous approach was to run `mogrify -strip -auto-orient` on every image. The biggest problem with that approach is that it spawns a separate native process for every upload, competing for memory and CPU outside the JVM's control. Under load, mogrify processes can pile up and starve the application.
+The previous approach was to run `mogrify -strip -auto-orient` on every image. The biggest problem with that approach is that it spawns a separate native process for every upload, competing for memory and CPU outside the JVM's control. Under load, mogrify processes can pile up and starve the application (or trigger an OS OOM kill).
 
-This project is a pure Java replacement, which keeps everything in-process, managed by the JVM's thread pool and garbage collector. Furthermore, it's more targeted -- surgically removing the non-orientation metadata segments and, in most cases, leaving the image data intact. For JPEG, PNG, WebP, and GIF, image data is copied verbatim — no decoding or re-encoding, so there's zero quality loss. (TIFF is the exception — it interleaves metadata with image data, so re-encoding is unavoidable.)
+This project is a pure Java replacement. Since memory stays within the JVM heap, the worst case under load is a recoverable `OutOfMemoryError` vs a process kill. Furthermore, this project's approach is more targeted -- surgically removing the non-orientation metadata segments and, in most cases, leaving the image data intact. For JPEG, PNG, WebP, and GIF, image data is copied verbatim — no decoding or re-encoding, so there's zero quality loss. (TIFF is the exception — it interleaves metadata with image data, so re-encoding is unavoidable.) Lastly, we fix an orientation bug present with the version of mogrify used previously (and in DIMS) for certain PNGs.
 
 In detail:
 
