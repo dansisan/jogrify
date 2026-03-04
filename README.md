@@ -106,7 +106,6 @@ In detail:
 | **Orientation** | `-auto-orient` applies as pixel rotation (changes dimensions, re-encodes) | Preserves the tag in a minimal EXIF segment (no pixel changes) |
 | **PNG eXIf orientation** | ImageMagick 6 doesn't read eXIf chunks, so `-auto-orient` is a no-op but `-strip` still removes the chunk — the orientation is lost and the image appears rotated incorrectly | Converts eXIf to a tEXt raw profile that ImageMagick 6 understands |
 | **File size** | Output often larger due to re-encoding differences | Output is smaller (metadata removed, image data unchanged) |
-| **Idempotency** | Each run re-encodes, producing different bytes | Running twice produces identical output |
 | **Dependencies** | Requires ImageMagick installed | Self-contained Java (no native dependencies) |
 | **TIFF** | Same — must re-encode | Same — must re-encode (TIFF interleaves metadata with image data) |
 
