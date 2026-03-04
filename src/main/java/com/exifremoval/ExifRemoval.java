@@ -487,21 +487,45 @@ public class ExifRemoval {
     }
 
     /**
-     * Write a PNG eXIf chunk containing only the orientation tag.
-     * PNG eXIf chunk data is raw TIFF/EXIF bytes (no "Exif\0\0" prefix).
+     * Write a PNG tEXt chunk containing the orientation tag as a hex-encoded
+     * "Raw profile type exif". This format is understood by ImageMagick 6+,
+     * unlike the eXIf chunk which requires ImageMagick 7.
      */
     private static void writePngExifChunk(OutputStream out, int orientation) throws Exception {
         byte[] tiffData = buildOrientationTiff(orientation);
-        byte[] chunkType = {'e', 'X', 'I', 'f'};
+
+        // The raw profile includes the "Exif\0\0" JPEG APP1 preamble before
+        // the TIFF data, matching the format that ImageMagick 6 expects.
+        byte[] preamble = {'E', 'x', 'i', 'f', 0, 0};
+        byte[] exifData = new byte[preamble.length + tiffData.length];
+        System.arraycopy(preamble, 0, exifData, 0, preamble.length);
+        System.arraycopy(tiffData, 0, exifData, preamble.length, tiffData.length);
+
+        // Build the raw profile value: "\nexif\n    <count>\n<hex>\n"
+        StringBuilder hex = new StringBuilder();
+        for (byte b : exifData) {
+            hex.append(String.format("%02x", b & 0xFF));
+        }
+        String profile = "\nexif\n" + String.format("%8d", exifData.length) + "\n" + hex + "\n";
+        byte[] profileBytes = profile.getBytes(StandardCharsets.ISO_8859_1);
+
+        // tEXt chunk: keyword\0value
+        byte[] keyword = "Raw profile type exif".getBytes(StandardCharsets.ISO_8859_1);
+        byte[] chunkData = new byte[keyword.length + 1 + profileBytes.length];
+        System.arraycopy(keyword, 0, chunkData, 0, keyword.length);
+        chunkData[keyword.length] = 0; // null separator
+        System.arraycopy(profileBytes, 0, chunkData, keyword.length + 1, profileBytes.length);
+
+        byte[] chunkType = {'t', 'E', 'X', 't'};
         DataOutputStream dos = new DataOutputStream(out);
 
-        dos.writeInt(tiffData.length);
+        dos.writeInt(chunkData.length);
         dos.write(chunkType);
-        dos.write(tiffData);
+        dos.write(chunkData);
 
         CRC32 crc = new CRC32();
         crc.update(chunkType);
-        crc.update(tiffData);
+        crc.update(chunkData);
         dos.writeInt((int) crc.getValue());
     }
 

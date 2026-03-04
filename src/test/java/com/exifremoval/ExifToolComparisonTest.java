@@ -124,6 +124,16 @@ class ExifToolComparisonTest {
         File output = OUTPUT_DIR.resolve(addSuffix(basename(resourcePath), "_processed")).toFile();
         assertDoesNotThrow(() -> ExifRemoval.process(input, output));
 
+        // PNG orientation is stored in a tEXt "Raw profile type exif" chunk
+        // (for ImageMagick 6 compatibility), which metadata-extractor doesn't
+        // parse into ExifIFD0Directory. Use our own reader which handles both.
+        if (isPng(resourcePath)) {
+            ExifRemoval.ImageInfo info = ExifRemoval.readImageInfo(output);
+            assertEquals(orientation, info.orientation,
+                    "Orientation value mismatch for " + resourcePath);
+            return;
+        }
+
         Metadata metadata = assertDoesNotThrow(
                 () -> ImageMetadataReader.readMetadata(output));
 
@@ -232,6 +242,11 @@ class ExifToolComparisonTest {
     private static boolean isWebp(String resourcePath) {
         return resourcePath.endsWith(".webp");
     }
+
+    private static boolean isPng(String resourcePath) {
+        return resourcePath.endsWith(".png");
+    }
+
 
     private static String basename(String resourcePath) {
         int slash = resourcePath.lastIndexOf('/');
