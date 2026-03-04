@@ -94,7 +94,9 @@ Both test suites write processed images to `build/test-output/` for visual inspe
 
 ## Why not mogrify?
 
-The previous approach was to run `mogrify -strip -auto-orient` on every image. This works but has significant downsides:
+The previous approach was to run `mogrify -strip -auto-orient` on every image. The biggest problem with this is that it spawns a separate native process for every upload, competing for memory and CPU outside the JVM's control. Under load, dozens of mogrify processes can pile up with no backpressure, starving the application. Pure Java keeps everything in-process, managed by the JVM's thread pool and garbage collector.
+
+Beyond that, there are several other downsides:
 
 | | `mogrify -strip -auto-orient` | exif-removal |
 |---|---|---|
