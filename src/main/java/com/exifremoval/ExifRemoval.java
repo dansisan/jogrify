@@ -419,10 +419,7 @@ public class ExifRemoval {
         out.write(0xFF);
         out.write(0xD8);
 
-        // Write minimal EXIF with orientation (skip if orientation == 1, the default)
-        if (orientation > 1 && orientation <= 8) {
-            writeOrientationApp1(out, orientation);
-        }
+        boolean wroteOrientation = orientation <= 1 || orientation > 8;
 
         int pos = 2; // skip SOI
         while (pos < data.length - 1) {
@@ -440,6 +437,10 @@ public class ExifRemoval {
             }
 
             if (marker == 0xDA) { // SOS — copy everything from here to end
+                if (!wroteOrientation) {
+                    writeOrientationApp1(out, orientation);
+                    wroteOrientation = true;
+                }
                 out.write(data, pos, data.length - pos);
                 break;
             }
@@ -477,9 +478,14 @@ public class ExifRemoval {
                 continue;
             }
 
-            // Copy all other segments as-is
+            // Copy this segment, then inject orientation APP1 after APP0 (JFIF)
             out.write(data, pos, segmentSize);
             pos += segmentSize;
+
+            if (!wroteOrientation && marker == 0xE0) {
+                writeOrientationApp1(out, orientation);
+                wroteOrientation = true;
+            }
         }
 
         Files.write(output.toPath(), out.toByteArray());
@@ -738,8 +744,13 @@ public class ExifRemoval {
         int pos = 13;
         if (hasGct) {
             int gctSize = 3 * (1 << ((packed & 0x07) + 1));
-            out.write(data, pos, gctSize);
-            pos += gctSize;
+            if (pos + gctSize > data.length) {
+                out.write(data, 13, data.length - 13); // truncated — copy rest unchanged
+                pos = data.length;
+            } else {
+                out.write(data, pos, gctSize);
+                pos += gctSize;
+            }
         }
 
         // Process blocks
