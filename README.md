@@ -20,6 +20,22 @@ JPEG, PNG, GIF, TIFF, WebP
 
 **Orientation handling:** For JPEG, PNG, and WebP, the orientation tag is preserved in a minimal EXIF segment so that downstream tools can apply it. For TIFF (which is re-encoded), the orientation is applied as a pixel transform during re-encoding.
 
+## Using as a dependency
+
+Releases are published via [JitPack](https://jitpack.io/#dansisan/jogrify). Add the JitPack repository and the dependency:
+
+```groovy
+repositories {
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'com.github.dansisan:jogrify:v1.0.0'
+}
+```
+
+To publish a new version, push a git tag (e.g. `v1.0.1`) — JitPack builds it on demand the first time it's requested.
+
 ## Usage
 
 ```bash

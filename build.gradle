@@ -1,12 +1,18 @@
 plugins {
-    id 'java'
+    id 'java-library'
     id 'application'
     id 'checkstyle'
+    id 'maven-publish'
 }
+
+group = 'com.github.dansisan'
+version = '1.0.0'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
+    withSourcesJar()
+    withJavadocJar()
 }
 
 repositories {
@@ -30,4 +36,16 @@ checkstyle {
 
 application {
     mainClass = 'com.exifremoval.ExifRemoval'
+}
+
+javadoc {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
 }
