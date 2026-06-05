@@ -247,7 +247,6 @@ class ExifToolComparisonTest {
         return resourcePath.endsWith(".png");
     }
 
-
     private static String basename(String resourcePath) {
         int slash = resourcePath.lastIndexOf('/');
         return slash >= 0 ? resourcePath.substring(slash + 1) : resourcePath;
